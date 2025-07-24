@@ -38,6 +38,7 @@ CONTROLLERS_DIR = controllers
 GROUND_STATION_DIR = ground_station
 BUS_DEBUGGER_DIR = bus_debugger
 TOOLS_DIR = tools
+DRIVERS_DIR = drivers
 DOCS_DIR = docs
 
 # Output Directories
@@ -50,12 +51,12 @@ BUILD_GS = $(BUILD_DIR)/ground_station
 BUILD_DEBUGGER = $(BUILD_DIR)/bus_debugger
 
 # Common Compiler Flags
-COMMON_CFLAGS = -Wall -Wextra -Werror -std=c99 -fdata-sections -ffunction-sections
-COMMON_CPPFLAGS = -I$(COMMON_DIR)/protocols -I$(COMMON_DIR)/drivers -I$(COMMON_DIR)/utils -I$(COMMON_DIR)/config
+COMMON_CFLAGS = -Wall -Wextra -Werror -std=c23 -fdata-sections -ffunction-sections -fanalyzer
+COMMON_CPPFLAGS = -I$(COMMON_DIR)/protocols -I$(COMMON_DIR)/drivers -I$(COMMON_DIR)/utils -I$(COMMON_DIR)/config -I$(DRIVERS_DIR)/common
 
 # Target-specific flags
 MAIN_BOARD_CFLAGS = $(COMMON_CFLAGS) -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard
-CONTROLLER_CFLAGS = $(COMMON_CFLAGS) -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft
+CONTROLLER_CFLAGS = $(COMMON_CFLAGS) -DSTM32C092xx=1 -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -I$(DRIVERS_DIR)/stm32c0xx
 GS_CFLAGS = $(COMMON_CFLAGS) -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-abi=hard
 
 # Debug/Release specific flags
@@ -66,11 +67,14 @@ else
 endif
 
 # Linker Flags
-MAIN_BOARD_LDFLAGS = -T main_board/linker/stm32h7xx_flash.ld -Wl,--gc-sections -Wl,--print-memory-usage
-CONTROLLER_LDFLAGS = -T controllers/linker/stm32c0xx_flash.ld -Wl,--gc-sections -Wl,--print-memory-usage
+MAIN_BOARD_LDFLAGS = -T linker/stm32h7xx_flash.ld -Wl,--gc-sections -Wl,--print-memory-usage
+CONTROLLER_LDFLAGS = -T linker/stm32c092xx_flash.ld -Wl,--gc-sections -Wl,--print-memory-usage
+
+MAIN_BOARD_STARTUP = $(COMMON_DIR)/target/stm32h7xx/startup.s
+CONTROLLER_STARTUP = $(COMMON_DIR)/target/stm32c092xx/startup.s
 
 # Source Files
-COMMON_SOURCES = $(wildcard $(COMMON_DIR)/*/*.c)
+COMMON_SOURCES = $(wildcard $(COMMON_DIR)/*/*.c) $(wildcard $(COMMON_DIR)/*/*.s)
 MAIN_BOARD_SOURCES = $(wildcard $(MAIN_BOARD_DIR)/src/*.c)
 SERVO_SOURCES = $(wildcard $(CONTROLLERS_DIR)/servo_controller/*.c)
 TC_SOURCES = $(wildcard $(CONTROLLERS_DIR)/tc_controller/*.c)
@@ -82,7 +86,7 @@ DEBUGGER_SOURCES = $(wildcard $(BUS_DEBUGGER_DIR)/firmware/*.c)
 COMMON_OBJECTS = $(COMMON_SOURCES:%.c=$(BUILD_COMMON)/%.o)
 MAIN_BOARD_OBJECTS = $(MAIN_BOARD_SOURCES:%.c=$(BUILD_MAIN)/%.o) $(COMMON_OBJECTS)
 SERVO_OBJECTS = $(SERVO_SOURCES:%.c=$(BUILD_SERVO)/%.o) $(COMMON_OBJECTS)
-TC_OBJECTS = $(TC_SOURCES:%.c=$(BUILD_TC)/%.o) $(COMMON_OBJECTS)
+TC_OBJECTS = $(TC_SOURCES:%.c=$(BUILD_TC)/%.o) $(COMMON_OBJECTS) $(CONTROLLER_STARTUP:%.s=$(BUILD_COMMON)/%.o)
 IO_OBJECTS = $(IO_SOURCES:%.c=$(BUILD_IO)/%.o) $(COMMON_OBJECTS)
 GS_OBJECTS = $(GS_SOURCES:%.c=$(BUILD_GS)/%.o) $(COMMON_OBJECTS)
 DEBUGGER_OBJECTS = $(DEBUGGER_SOURCES:%.c=$(BUILD_DEBUGGER)/%.o) $(COMMON_OBJECTS)
@@ -199,6 +203,12 @@ $(BUILD_COMMON)/%.o: %.c | $(BUILD_COMMON)
 	@mkdir -p $(dir $@)
 	@echo "Compiling $<..."
 	$(CC) $(COMMON_CFLAGS) $(COMMON_CPPFLAGS) $(OPT_FLAGS) -c $< -o $@
+
+$(BUILD_COMMON)/%.o: %.s | $(BUILD_COMMON)
+	@mkdir -p $(dir $@)
+	@echo "Assembling $<..."
+	$(AS) $< -o $@
+
 
 # Main board object compilation
 $(BUILD_MAIN)/%.o: %.c | $(BUILD_MAIN)
