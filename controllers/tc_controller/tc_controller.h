@@ -11,8 +11,21 @@
 #include "controller_base.h"
 #include "papyrus_can.h"
 #include "papyrus_config.h"
+#include "stm32c0xx_hal.h"
+#include "stm32c0xx_hal_spi.h"
+#include "stm32c0xx_hal_uart.h"
 #include <stdbool.h>
 #include <stdint.h>
+
+#define PG_FAULT_LED GPIOA
+#define PIN_FAULT_LED GPIO_PIN_1
+extern UART_HandleTypeDef huart;
+extern SPI_HandleTypeDef hspi;
+extern TIM_HandleTypeDef htim1;
+
+void Error_Handler();
+
+int __io_getchar(void);
 
 /* Thermocouple Types */
 typedef enum {
@@ -134,8 +147,9 @@ typedef struct {
   tc_status_t tc_status;
 
   /* Hardware interfaces */
-  SPI_HandleTypeDef *hspi;
-  ADC_HandleTypeDef *hadc_cjc;
+  // TODO: SPI interface!
+  // SPI_HandleTypeDef *hspi;
+  // ADC_HandleTypeDef *hadc_cjc;
   GPIO_TypeDef *cs_gpio_port[TC_MAX_CHANNELS];
   uint16_t cs_gpio_pin[TC_MAX_CHANNELS];
 

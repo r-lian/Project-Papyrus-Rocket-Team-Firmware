@@ -10,7 +10,7 @@ VERSION_PATCH = 0
 BUILD_NUMBER = 1
 
 # Build Configuration
-BUILD_TYPE ?= Release
+BUILD_TYPE ?= Debug
 VERBOSE ?= 0
 PARALLEL_JOBS ?= 4
 
@@ -49,9 +49,10 @@ BUILD_TC = $(BUILD_DIR)/tc_controller
 BUILD_IO = $(BUILD_DIR)/io_controller
 BUILD_GS = $(BUILD_DIR)/ground_station
 BUILD_DEBUGGER = $(BUILD_DIR)/bus_debugger
+BUILD_CONTROLLER = $(BUILD_DIR)/controller
 
 # Common Compiler Flags
-COMMON_CFLAGS = -Wall -Wextra -Werror -std=c23 -fdata-sections -ffunction-sections -fanalyzer
+COMMON_CFLAGS = -Wall -Wextra -Werror -Wno-analyzer-infinite-loop -std=c23 -fdata-sections -ffunction-sections -fanalyzer
 COMMON_CPPFLAGS = -I$(COMMON_DIR)/protocols -I$(COMMON_DIR)/drivers -I$(COMMON_DIR)/utils -I$(COMMON_DIR)/config -I$(DRIVERS_DIR)/common
 
 # Target-specific flags
@@ -81,15 +82,19 @@ TC_SOURCES = $(wildcard $(CONTROLLERS_DIR)/tc_controller/*.c)
 IO_SOURCES = $(wildcard $(CONTROLLERS_DIR)/io_controller/*.c)
 GS_SOURCES = $(wildcard $(GROUND_STATION_DIR)/firmware/*.c)
 DEBUGGER_SOURCES = $(wildcard $(BUS_DEBUGGER_DIR)/firmware/*.c)
+CDRIVER_SOURCES = $(wildcard $(DRIVERS_DIR)/stm32c0xx/*.c)
+CONTROLLERS_EXTRA_SOURCES = $(wildcard $(CONTROLLERS_DIR)/framework/*.c)
 
 # Object Files
 COMMON_OBJECTS = $(COMMON_SOURCES:%.c=$(BUILD_COMMON)/%.o)
+CONTROLLER_COMMON = $(COMMON_OBJECTS) $(CONTROLLER_STARTUP:%.s=$(BUILD_COMMON)/%.o) $(CONTROLLERS_EXTRA_SOURCES:%.c=$(BUILD_CONTROLLER)/%.o) $(CDRIVER_OBJECTS)
 MAIN_BOARD_OBJECTS = $(MAIN_BOARD_SOURCES:%.c=$(BUILD_MAIN)/%.o) $(COMMON_OBJECTS)
-SERVO_OBJECTS = $(SERVO_SOURCES:%.c=$(BUILD_SERVO)/%.o) $(COMMON_OBJECTS)
-TC_OBJECTS = $(TC_SOURCES:%.c=$(BUILD_TC)/%.o) $(COMMON_OBJECTS) $(CONTROLLER_STARTUP:%.s=$(BUILD_COMMON)/%.o)
-IO_OBJECTS = $(IO_SOURCES:%.c=$(BUILD_IO)/%.o) $(COMMON_OBJECTS)
-GS_OBJECTS = $(GS_SOURCES:%.c=$(BUILD_GS)/%.o) $(COMMON_OBJECTS)
+SERVO_OBJECTS = $(SERVO_SOURCES:%.c=$(BUILD_SERVO)/%.o) $(CONTROLLER_COMMON)
+TC_OBJECTS = $(TC_SOURCES:%.c=$(BUILD_TC)/%.o) $(CONTROLLER_COMMON)
+IO_OBJECTS = $(IO_SOURCES:%.c=$(BUILD_IO)/%.o) $(CONTROLLER_COMMON)
+GS_OBJECTS = $(GS_SOURCES:%.c=$(BUILD_GS)/%.o) $(CONTROLLER_COMMON)
 DEBUGGER_OBJECTS = $(DEBUGGER_SOURCES:%.c=$(BUILD_DEBUGGER)/%.o) $(COMMON_OBJECTS)
+CDRIVER_OBJECTS = $(CDRIVER_SOURCES:%.c=%.o)
 
 # Target Binaries
 MAIN_BOARD_ELF = $(BUILD_MAIN)/main_board.elf
@@ -142,6 +147,7 @@ $(MAIN_BOARD_ELF): $(MAIN_BOARD_OBJECTS) | $(BUILD_MAIN)
 	$(OBJCOPY) -O binary $@ $(BUILD_MAIN)/main_board.bin
 	$(OBJCOPY) -O ihex $@ $(BUILD_MAIN)/main_board.hex
 	$(SIZE) $@
+	@echo "Successfully linked main board firmware."
 
 # Servo Controller Target
 .PHONY: servo_controller
@@ -153,6 +159,7 @@ $(SERVO_ELF): $(SERVO_OBJECTS) | $(BUILD_SERVO)
 	$(OBJCOPY) -O binary $@ $(BUILD_SERVO)/servo_controller.bin
 	$(OBJCOPY) -O ihex $@ $(BUILD_SERVO)/servo_controller.hex
 	$(SIZE) $@
+	@echo "Successfully linked servo controller firmware."
 
 # Thermocouple Controller Target
 .PHONY: tc_controller
@@ -164,6 +171,7 @@ $(TC_ELF): $(TC_OBJECTS) | $(BUILD_TC)
 	$(OBJCOPY) -O binary $@ $(BUILD_TC)/tc_controller.bin
 	$(OBJCOPY) -O ihex $@ $(BUILD_TC)/tc_controller.hex
 	$(SIZE) $@
+	@echo "Successfully linked thermocouple controller firmware."
 
 # I/O Controller Target
 .PHONY: io_controller
@@ -175,6 +183,7 @@ $(IO_ELF): $(IO_OBJECTS) | $(BUILD_IO)
 	$(OBJCOPY) -O binary $@ $(BUILD_IO)/io_controller.bin
 	$(OBJCOPY) -O ihex $@ $(BUILD_IO)/io_controller.hex
 	$(SIZE) $@
+	@echo "Successfully linked I/O controller firmware."
 
 # Ground Station Target
 .PHONY: ground_station
@@ -186,6 +195,7 @@ $(GS_ELF): $(GS_OBJECTS) | $(BUILD_GS)
 	$(OBJCOPY) -O binary $@ $(BUILD_GS)/ground_station.bin
 	$(OBJCOPY) -O ihex $@ $(BUILD_GS)/ground_station.hex
 	$(SIZE) $@
+	@echo "Successfully linked ground station firmware."
 
 # Bus Debugger Target
 .PHONY: bus_debugger
@@ -197,6 +207,7 @@ $(DEBUGGER_ELF): $(DEBUGGER_OBJECTS) | $(BUILD_DEBUGGER)
 	$(OBJCOPY) -O binary $@ $(BUILD_DEBUGGER)/bus_debugger.bin
 	$(OBJCOPY) -O ihex $@ $(BUILD_DEBUGGER)/bus_debugger.hex
 	$(SIZE) $@
+	@echo "Successfully linked bus debugger firmware."
 
 # Common object compilation
 $(BUILD_COMMON)/%.o: %.c | $(BUILD_COMMON)
@@ -210,6 +221,12 @@ $(BUILD_COMMON)/%.o: %.s | $(BUILD_COMMON)
 	$(AS) $< -o $@
 
 
+
+$(DRIVERS_DIR)/stm32c0xx/%.o: $(DRIVERS_DIR)/stm32c0xx/%.c | $(DRIVERS_DIR)/stm32c0xx
+	@echo "Compiling controller driver $<..."
+	$(CC) $(COMMON_CFLAGS) $(COMMON_CPPFLAGS) $(CONTROLLER_CFLAGS) $(OPT_FLAGS) -w -c $< -o $@
+
+
 # Main board object compilation
 $(BUILD_MAIN)/%.o: %.c | $(BUILD_MAIN)
 	@mkdir -p $(dir $@)
@@ -217,7 +234,7 @@ $(BUILD_MAIN)/%.o: %.c | $(BUILD_MAIN)
 	$(CC) $(MAIN_BOARD_CFLAGS) $(COMMON_CPPFLAGS) -I$(MAIN_BOARD_DIR)/inc $(OPT_FLAGS) -c $< -o $@
 
 # Controller object compilation
-$(BUILD_SERVO)/%.o $(BUILD_TC)/%.o $(BUILD_IO)/%.o: %.c
+$(BUILD_CONTROLLER)/%.o $(BUILD_SERVO)/%.o $(BUILD_TC)/%.o $(BUILD_IO)/%.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $< for controller..."
 	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I$(CONTROLLERS_DIR)/framework $(OPT_FLAGS) -c $< -o $@
@@ -247,7 +264,7 @@ flash_servo: $(SERVO_ELF)
 	$(STLINK) write $(BUILD_SERVO)/servo_controller.bin 0x08000000
 
 flash_tc: $(TC_ELF)
-	$(STLINK) write $(BUILD_TC)/tc_controller.bin 0x08000000
+	$(STLINK) --mass-erase --connect-under-reset write $(BUILD_TC)/tc_controller.bin 0x08000000
 
 flash_io: $(IO_ELF)
 	$(STLINK) write $(BUILD_IO)/io_controller.bin 0x08000000
@@ -336,8 +353,10 @@ memory_usage: all
 .PHONY: clean clean_all
 clean:
 	rm -rf $(BUILD_DIR)
+drivers_clean:
+	rm -rf $(DRIVERS_DIR)/*/*.o
 
-clean_all: clean docs_clean
+clean_all: clean docs_clean drivers_clean
 
 # Version information
 .PHONY: version

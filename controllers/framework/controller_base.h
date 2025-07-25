@@ -11,7 +11,7 @@
 #include "papyrus_can.h"
 #include "papyrus_config.h"
 #include "papyrus_utils.h"
-#include "stm32c0xx_hal.h"
+#include "stm32c0xx_hal_fdcan.h"
 #include <stdbool.h>
 #include <stdint.h>
 

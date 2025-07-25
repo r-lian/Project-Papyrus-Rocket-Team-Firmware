@@ -65,7 +65,6 @@
 
 /* Safety Configuration */
 #define WATCHDOG_TIMEOUT_MS 5000     // Hardware watchdog timeout
-#define CAN_TIMEOUT_MS 1000          // CAN communication timeout
 #define EMERGENCY_STOP_HOLD_MS 10000 // Emergency stop hold time
 #define SAFE_MODE_TIMEOUT_MS 30000   // Auto-exit safe mode timeout
 
