@@ -6,6 +6,7 @@
  */
 
 #include "papyrus_can.h"
+#include "papyrus_utils.h"
 #include <stddef.h>
 #include <stdio.h>
 
@@ -34,83 +35,6 @@ static const uint8_t crc8_table[256] = {
     0xde, 0xd9, 0xd0, 0xd7, 0xc2, 0xc5, 0xcc, 0xcb, 0xe6, 0xe1, 0xe8, 0xef,
     0xfa, 0xfd, 0xf4, 0xf3};
 
-uint32_t can_build_id(can_priority_t priority, board_id_t source,
-                      msg_type_t msg_type) {
-  uint32_t id = 0;
-
-  // Validate inputs
-  if (priority > CAN_PRIORITY_DEBUG || source > BOARD_ID_GROUND ||
-      msg_type > MSG_TYPE_RESERVED) {
-    return 0; // Invalid ID
-  }
-
-  // Build CAN ID from components
-  id |= ((uint32_t)priority & CAN_ID_PRIORITY_MASK) << CAN_ID_PRIORITY_SHIFT;
-  id |= ((uint32_t)source & CAN_ID_SOURCE_MASK) << CAN_ID_SOURCE_SHIFT;
-  id |= ((uint32_t)msg_type & CAN_ID_MSGTYPE_MASK) << CAN_ID_MSGTYPE_SHIFT;
-
-  return id;
-}
-
-can_priority_t can_get_priority(uint32_t can_id) {
-  return (can_priority_t)((can_id >> CAN_ID_PRIORITY_SHIFT) &
-                          CAN_ID_PRIORITY_MASK);
-}
-
-board_id_t can_get_source(uint32_t can_id) {
-  return (board_id_t)((can_id >> CAN_ID_SOURCE_SHIFT) & CAN_ID_SOURCE_MASK);
-}
-
-msg_type_t can_get_msg_type(uint32_t can_id) {
-  return (msg_type_t)((can_id >> CAN_ID_MSGTYPE_SHIFT) & CAN_ID_MSGTYPE_MASK);
-}
-
-bool can_validate_message(const can_message_t *msg) {
-  if (msg == NULL) {
-    return false;
-  }
-
-  // Check data length
-  if (msg->length > CAN_MAX_DATA_LENGTH) {
-    return false;
-  }
-
-  // Check CAN ID validity
-  if (msg->id > 0x7FF) { // 11-bit CAN ID limit
-    return false;
-  }
-
-  // Extract components and validate
-  can_priority_t priority = can_get_priority(msg->id);
-  board_id_t source = can_get_source(msg->id);
-  msg_type_t msg_type = can_get_msg_type(msg->id);
-
-  if (priority > CAN_PRIORITY_DEBUG || source > BOARD_ID_GROUND ||
-      msg_type > MSG_TYPE_RESERVED) {
-    return false;
-  }
-
-  // Additional message-specific validation
-  switch (msg_type) {
-  case MSG_TYPE_SYSTEM:
-    // System messages should have at least 1 byte (command)
-    return (msg->length >= 1);
-
-  case MSG_TYPE_HEARTBEAT:
-    // Heartbeat messages should be exactly 4 bytes (timestamp)
-    return (msg->length == 4);
-
-  case MSG_TYPE_ACK:
-  case MSG_TYPE_NACK:
-    // Acknowledgment messages should have at least 2 bytes
-    return (msg->length >= 2);
-
-  default:
-    // Other message types are valid if basic checks pass
-    return true;
-  }
-}
-
 uint8_t can_calculate_crc8(const uint8_t *data, uint8_t length) {
   uint8_t crc = 0;
 
@@ -123,86 +47,4 @@ uint8_t can_calculate_crc8(const uint8_t *data, uint8_t length) {
   }
 
   return crc;
-}
-
-/**
- * @brief Convert CAN message to human-readable string for debugging
- * @param msg Pointer to CAN message
- * @param buffer Output buffer
- * @param buffer_size Size of output buffer
- * @return Length of formatted string
- */
-int can_message_to_string(const can_message_t *msg, char *buffer,
-                          int buffer_size) {
-  if (msg == NULL || buffer == NULL || buffer_size < 64) {
-    return 0;
-  }
-
-  can_priority_t priority = can_get_priority(msg->id);
-  board_id_t source = can_get_source(msg->id);
-  msg_type_t msg_type = can_get_msg_type(msg->id);
-
-  const char *priority_str[] = {"EMRG", "CTRL", "DATA", "DBUG"};
-  const char *msg_type_str[] = {"SYS", "CMD", "DAT", "STA", "ERR", "CFG",
-                                "SYN", "DBG", "HB",  "ACK", "NAK"};
-
-  int len =
-      snprintf(buffer, buffer_size,
-               "ID:0x%03X [%s|%02d|%s] Len:%d Data:", (unsigned int)msg->id,
-               (priority < 4) ? priority_str[priority] : "???", source,
-               (msg_type < 11) ? msg_type_str[msg_type] : "???", msg->length);
-
-  // Add hex data bytes
-  for (int i = 0; i < msg->length && len < buffer_size - 4; i++) {
-    len += snprintf(buffer + len, buffer_size - len, " %02X", msg->data[i]);
-  }
-
-  return len;
-}
-
-/**
- * @brief Check if board ID is a controller type
- * @param board_id Board identifier
- * @return true if controller board, false otherwise
- */
-bool can_is_controller_board(board_id_t board_id) {
-  return (board_id >= BOARD_ID_SERVO_1 && board_id <= BOARD_ID_IO_2);
-}
-
-/**
- * @brief Get board type string for debugging
- * @param board_id Board identifier
- * @return String description of board type
- */
-const char *can_get_board_name(board_id_t board_id) {
-  switch (board_id) {
-  case BOARD_ID_MAIN:
-    return "Main Board";
-  case BOARD_ID_SERVO_1:
-    return "Servo Ctrl #1";
-  case BOARD_ID_SERVO_2:
-    return "Servo Ctrl #2";
-  case BOARD_ID_SERVO_3:
-    return "Servo Ctrl #3";
-  case BOARD_ID_TC_1:
-    return "TC Ctrl #1";
-  case BOARD_ID_TC_2:
-    return "TC Ctrl #2";
-  case BOARD_ID_TC_3:
-    return "TC Ctrl #3";
-  case BOARD_ID_IO_1:
-    return "I/O Ctrl #1";
-  case BOARD_ID_IO_2:
-    return "I/O Ctrl #2";
-  case BOARD_ID_POWER:
-    return "Power Board";
-  case BOARD_ID_RADIO:
-    return "Radio Board";
-  case BOARD_ID_DEBUGGER:
-    return "Bus Debugger";
-  case BOARD_ID_GROUND:
-    return "Ground Station";
-  default:
-    return "Unknown";
-  }
 }

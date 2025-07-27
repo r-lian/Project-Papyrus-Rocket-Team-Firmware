@@ -49,13 +49,6 @@
 #define SERVO_POSITION_MAX 4095     // Maximum servo position (12-bit)
 #define SERVO_CURRENT_LIMIT_MA 2000 // Servo current limit (mA)
 
-/* Thermocouple Configuration */
-#define TC_MAX_CHANNELS 8      // Maximum TCs per controller
-#define TC_SAMPLE_RATE_HZ 10   // TC sampling rate
-#define TC_TEMP_RESOLUTION 0.1 // Temperature resolution (°C)
-#define TC_MAX_TEMP_C 1200     // Maximum measurable temperature
-#define TC_MIN_TEMP_C -200     // Minimum measurable temperature
-
 /* Memory Configuration */
 #define FLASH_CONFIG_SIZE 4096 // Configuration storage size (bytes)
 #define FLASH_LOG_SIZE 65536   // Log storage size (bytes)

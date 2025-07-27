@@ -7,9 +7,6 @@
 #include "stm32c0xx_hal_tim.h"
 #include "stm32c0xx_hal_uart.h"
 #include "tc_controller.h"
-UART_HandleTypeDef huart;
-SPI_HandleTypeDef hspi;
-TIM_HandleTypeDef htim1;
 
 int SystemClock_Config(void) {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
@@ -43,161 +40,19 @@ int SystemClock_Config(void) {
   return 0;
 }
 void SysTick_Handler(void) { HAL_IncTick(); }
-void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 
-papyrus_status_t tc_hardware_init(tc_controller_t *tc_ctrl) {
-  HAL_Init();
+PapyrusStatus tc_hardware_init(TCController *tc_ctrl) {
   if (SystemClock_Config())
     return PAPYRUS_ERROR_HARDWARE;
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  GPIO_InitTypeDef gpio_init = {0};
-  uint16_t pin;
-  /*
-  pin = PIN_FAULT_LED;
-  gpio_init.Pin = pin;
-  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio_init.Pull = GPIO_NOPULL;
-  gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(PG_FAULT_LED, &gpio_init);
-  */
-  pin = GPIO_PIN_4;
-  gpio_init.Pin = pin;
-  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio_init.Pull = GPIO_NOPULL;
-  gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &gpio_init);
-  pin = GPIO_PIN_7;
-  gpio_init.Pin = pin;
-  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio_init.Pull = GPIO_NOPULL;
-  gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &gpio_init);
-  pin = GPIO_PIN_14;
-  gpio_init.Pin = pin;
-  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio_init.Pull = GPIO_NOPULL;
-  gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &gpio_init);
-  pin = GPIO_PIN_15;
-  gpio_init.Pin = pin;
-  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
-  gpio_init.Pull = GPIO_NOPULL;
-  gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &gpio_init);
 
-  huart.Instance = USART2;
-  huart.Init.BaudRate = 115200;
-  huart.Init.WordLength = UART_WORDLENGTH_8B;
-  huart.Init.StopBits = UART_STOPBITS_1;
-  huart.Init.Parity = UART_PARITY_NONE;
-  huart.Init.Mode = UART_MODE_TX_RX;
-  huart.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-  huart.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart) != HAL_OK) {
-    return PAPYRUS_ERROR_HARDWARE;
-  }
-
-  hspi.Instance = SPI1;
-  hspi.Init.Mode = SPI_MODE_MASTER;
-  hspi.Init.Direction = SPI_DIRECTION_2LINES;
-  hspi.Init.DataSize = SPI_DATASIZE_8BIT;
-  hspi.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi.Init.CLKPhase = SPI_PHASE_1EDGE;
-  hspi.Init.NSS = SPI_NSS_SOFT;
-  hspi.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  hspi.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  hspi.Init.TIMode = SPI_TIMODE_DISABLE;
-  hspi.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  hspi.Init.CRCPolynomial = 7;
-  hspi.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  hspi.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-  if (HAL_SPI_Init(&hspi) != HAL_OK) {
-    return PAPYRUS_ERROR_HARDWARE;
-  }
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
-  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
-
-  /* USER CODE BEGIN TIM1_Init 1 */
-
-  /* USER CODE END TIM1_Init 1 */
-  htim1.Instance = TIM1;
-  htim1.Init.Prescaler = 191 / 4;
-  htim1.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim1.Init.Period = 62499;
-  htim1.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim1.Init.RepetitionCounter = 0;
-  htim1.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
-  if (HAL_TIM_Base_Init(&htim1) != HAL_OK) {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim1, &sClockSourceConfig) != HAL_OK) {
-    Error_Handler();
-  }
-  if (HAL_TIM_PWM_Init(&htim1) != HAL_OK) {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK) {
-    Error_Handler();
-  }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = htim1.Init.Period / 2;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_PWM_ConfigChannel(&htim1, &sConfigOC, TIM_CHANNEL_2) != HAL_OK) {
-    Error_Handler();
-  }
-  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
-  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
-  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 0;
-  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
-  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
-  sBreakDeadTimeConfig.BreakFilter = 0;
-  sBreakDeadTimeConfig.BreakAFMode = TIM_BREAK_AFMODE_INPUT;
-  sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
-  sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
-  sBreakDeadTimeConfig.Break2Filter = 0;
-  sBreakDeadTimeConfig.Break2AFMode = TIM_BREAK_AFMODE_INPUT;
-  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-  if (HAL_TIMEx_ConfigBreakDeadTime(&htim1, &sBreakDeadTimeConfig) != HAL_OK) {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM1_Init 2 */
-
-  /* USER CODE END TIM1_Init 2 */
-  HAL_TIM_MspPostInit(&htim1);
-
-  controller_base_init(&tc_ctrl->base, BOARD_ID_TC_1,
-                       CONTROLLER_TYPE_THERMOCOUPLE);
+  // Configure TC SPI bus
+  tc_ctrl->flash_spi.mosi = TC_SPI_MOSI;
+  tc_ctrl->flash_spi.miso = TC_SPI_MISO;
+  tc_ctrl->flash_spi.sck = TC_SPI_SCK;
+  tc_ctrl->flash_spi.cs = TC_SPI_FLASH_CS;
 
   return PAPYRUS_OK;
-}
-
-int __io_putchar(char ch) {
-  HAL_UART_Transmit(&huart, (uint8_t *)&ch, 1, 10);
-  return ch;
-}
-
-int __io_getchar(void) {
-  uint8_t ch = 0;
-  __HAL_UART_CLEAR_OREFLAG(&huart);
-
-  HAL_UART_Receive(&huart, &ch, 1, 0xFFFF);
-  HAL_UART_Transmit(&huart, &ch, 1, 0xFFFF);
-  return ch;
 }
 
 void HAL_MspInit(void) {

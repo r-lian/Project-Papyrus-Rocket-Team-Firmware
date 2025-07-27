@@ -20,10 +20,9 @@ int main() {
   }
   // setvbuf(stdin, nullptr, _IONBF, 0);
   //__io_getchar();
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_7, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_14, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+  // HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_SET);
+  // HAL_Delay(500);
   // uint8_t dataBuf[4];
   // dataBuf[0] = 0;
   // dataBuf[1] = 0;
@@ -31,6 +30,9 @@ int main() {
   // dataBuf[3] = 0;
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_2);
   for (;;) {
+    // HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6, GPIO_PIN_RESET);
+    HAL_Delay(500);
+    // HAL_Delay(500);
     /*
     dataBuf[0] = 0x9F;
     printf("Reading Flash ID:\r\n");
