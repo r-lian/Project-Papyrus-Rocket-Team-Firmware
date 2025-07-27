@@ -53,7 +53,7 @@ BUILD_CONTROLLER = $(BUILD_DIR)/controller
 
 # Common Compiler Flags
 COMMON_CFLAGS = -Wall -Wextra -Werror -Wno-analyzer-infinite-loop -std=c23 -fdata-sections -ffunction-sections -fanalyzer
-COMMON_CPPFLAGS = -I$(COMMON_DIR)/protocols -I$(COMMON_DIR)/drivers -I$(COMMON_DIR)/utils -I$(COMMON_DIR)/config -I$(DRIVERS_DIR)/common
+COMMON_CPPFLAGS = -I$(COMMON_DIR)/protocols -I$(COMMON_DIR)/drivers -I$(COMMON_DIR)/utils -I$(COMMON_DIR)/config -I$(DRIVERS_DIR)/common -I$(DRIVERS_DIR)
 
 # Target-specific flags
 MAIN_BOARD_CFLAGS = $(COMMON_CFLAGS) -mcpu=cortex-m7 -mthumb -mfpu=fpv5-d16 -mfloat-abi=hard
@@ -71,8 +71,8 @@ endif
 MAIN_BOARD_LDFLAGS = -T linker/stm32h7xx_flash.ld -Wl,--gc-sections -Wl,--print-memory-usage
 CONTROLLER_LDFLAGS = -T linker/stm32c092xx_flash.ld -Wl,--gc-sections -Wl,--print-memory-usage
 
-MAIN_BOARD_STARTUP = $(COMMON_DIR)/target/stm32h7xx/startup.s
-CONTROLLER_STARTUP = $(COMMON_DIR)/target/stm32c092xx/startup.s
+MAIN_BOARD_STARTUP = $(MAIN_BOARD_DIR)/startup.s
+CONTROLLER_STARTUP = $(CONTROLLERS_DIR)/target/startup.s
 
 # Source Files
 COMMON_SOURCES = $(wildcard $(COMMON_DIR)/*/*.c) $(wildcard $(COMMON_DIR)/*/*.s)
@@ -237,7 +237,7 @@ $(BUILD_MAIN)/%.o: %.c | $(BUILD_MAIN)
 $(BUILD_CONTROLLER)/%.o $(BUILD_SERVO)/%.o $(BUILD_TC)/%.o $(BUILD_IO)/%.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $< for controller..."
-	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I$(CONTROLLERS_DIR)/framework $(OPT_FLAGS) -c $< -o $@
+	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I$(CONTROLLERS_DIR)/framework -I $(CONTROLLERS_DIR)/target $(OPT_FLAGS) -c $< -o $@
 
 # Ground station object compilation
 $(BUILD_GS)/%.o: %.c | $(BUILD_GS)

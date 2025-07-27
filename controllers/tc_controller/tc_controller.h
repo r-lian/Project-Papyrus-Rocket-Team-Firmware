@@ -28,17 +28,16 @@ int __io_getchar(void);
 #define TC_MIN_TEMP_C -200 // Minimum measurable temperature
 
 /* Hardware Definition */
-const PapyrusGPIO TC_FAULT_LED = {GPIOA, GPIO_PIN_1};
-const PapyrusGPIO TC_STATUS_LED = {GPIOA, GPIO_PIN_0};
-const PapyrusGPIO TC_SPI_MOSI = {GPIOA, GPIO_PIN_7};
-const PapyrusGPIO TC_SPI_MISO = {GPIOA, GPIO_PIN_6};
-const PapyrusGPIO TC_SPI_SCK = {GPIOA, GPIO_PIN_5};
-const PapyrusGPIO TC_SPI_FLASH_CS = {GPIOA, GPIO_PIN_4};
-const PapyrusGPIO TC_SPI_TC_CS[] = {
-    {GPIOB, GPIO_PIN_7},
-    {GPIOC, GPIO_PIN_14},
-    {GPIOC, GPIO_PIN_15},
-};
+extern const PapyrusGPIO TC_FAULT_LED;
+extern const PapyrusGPIO TC_STATUS_LED;
+extern const PapyrusGPIO TC_SPI_MOSI;
+extern const PapyrusGPIO TC_SPI_MISO;
+extern const PapyrusGPIO TC_SPI_SCK;
+extern const PapyrusGPIO TC_SPI_FLASH_CS;
+extern const PapyrusGPIO TC_SPI_TC_CS[];
+
+extern const PapyrusGPIO TC_UART_RX;
+extern const PapyrusGPIO TC_UART_TX;
 
 /* Thermocouple Types */
 typedef enum {
@@ -109,6 +108,8 @@ typedef struct {
   TCCjcRead last_cjc_values[TC_MAX_CHANNELS];
 
 } TCController;
+
+extern TCController this;
 
 /* Function Prototypes - TC Controller Main Functions */
 

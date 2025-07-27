@@ -41,4 +41,9 @@ typedef struct {
 #define CLAMP(x, min, max) (PAPYRUS_MIN(PAPYRUS_MAX((x), (min)), (max)))
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
+#define GPIO(p) p.grp, p.pin
+#define FORWARD_ERR(stmt)                                                      \
+  if ((err = stmt) != PAPYRUS_OK)                                              \
+    return err;
+
 #endif /* PAPYRUS_UTILS_H */

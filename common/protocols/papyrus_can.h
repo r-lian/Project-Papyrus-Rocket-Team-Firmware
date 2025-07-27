@@ -8,9 +8,38 @@
 #ifndef PAPYRUS_CAN_H
 #define PAPYRUS_CAN_H
 
-#include "stm32c0xx_hal_fdcan.h"
 #include <stdbool.h>
 #include <stdint.h>
+
+#ifdef STM32C092xx
+#include "stm32c0xx/stm32c0xx_hal_fdcan.h"
+#else
+/* Placeholder definitions */
+typedef struct {
+  uint32_t Identifier;
+  uint32_t IdType;
+  uint32_t TxFrameType;
+  uint32_t DataLength;
+  uint32_t ErrorStateIndicator;
+  uint32_t BitRateSwitch;
+  uint32_t FDFormat;
+  uint32_t TxEventFifoControl;
+  uint32_t MessageMarker;
+} FDCAN_TxHeaderTypeDef;
+
+typedef struct {
+  uint32_t Identifier;
+  uint32_t IdType;
+  uint32_t RxFrameType;
+  uint32_t DataLength;
+  uint32_t ErrorStateIndicator;
+  uint32_t BitRateSwitch;
+  uint32_t FDFormat;
+  uint32_t RxTimestamp;
+  uint32_t FilterIndex;
+  uint32_t IsFilterMatchingFrame;
+} FDCAN_RxHeaderTypeDef;
+#endif
 
 /* CAN Configuration */
 #define CAN_BAUDRATE 500000   // 500 kbps
@@ -83,6 +112,8 @@ typedef enum {
   ERROR_DATA_STORAGE,     // Onboard data storage fault
 } ErrorCode;
 
+/* Placeholder Headers */
+
 /* CAN Message Structure */
 typedef struct {
   union {
@@ -113,12 +144,5 @@ typedef struct {
   } __attribute__((packed));
 } CANMessage;
 /* Function Prototypes */
-
-typedef struct {
-  FDCAN_HandleTypeDef handle;
-  uint32_t can_baudrate;
-  uint8_t can_retry_count;
-  uint16_t can_timeout_ms;
-} PapyrusCAN;
 
 #endif /* PAPYRUS_CAN_H */

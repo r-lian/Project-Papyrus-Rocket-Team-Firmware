@@ -86,12 +86,16 @@ typedef struct {
 /**
  * @brief Initialize controller base system
  * @param controller Pointer to controller instance
- * @param board_id Board identifier
- * @param controller_type Type of controller
  * @return PAPYRUS_OK on success
  */
-PapyrusStatus controller_base_init(ControllerBase *controller, BoardID board_id,
-                                   ControllerType controller_type);
+PapyrusStatus controller_base_init(ControllerBase *controller);
+
+/**
+ * @brief Initialize controller base hardware
+ * @param controller Pointer to controller instance
+ * @return PAPYRUS_OK on success
+ */
+PapyrusStatus controller_hardware_init(ControllerBase *controller);
 
 /**
  * @brief Load controller configuration from flash
