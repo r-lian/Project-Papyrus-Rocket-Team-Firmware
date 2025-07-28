@@ -4,15 +4,11 @@
  * @author Papyrus Avionics Team
  * @date 2024
  */
-
-#ifndef CONTROLLER_BASE_H
-#define CONTROLLER_BASE_H
+#pragma once
 
 #include "papyrus_can.h"
-#include "papyrus_config.h"
 #include "papyrus_hardware.h"
 #include "papyrus_utils.h"
-#include "stm32c0xx_hal_fdcan.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -41,13 +37,6 @@ typedef enum {
   SUBDEV_STATE_DISABLED
 } SubdevState;
 
-/* Error Condition Entry */
-typedef struct {
-  ErrorCode err;
-  uint8_t target;
-  uint32_t timestamp;
-} ErrorEntry;
-
 /* Board Status Structure */
 typedef struct {
   ControllerState state;
@@ -71,6 +60,8 @@ typedef struct {
 
   /* CAN Communication */
   PapyrusCAN can;
+  CANMessage transactions[8];
+  uint8_t num_transactions;
 
   /* UART Debug Communication */
   PapyrusUART uart;
@@ -80,6 +71,18 @@ typedef struct {
   PapyrusGPIO status_indicator;
 
 } ControllerBase;
+
+typedef PapyrusStatus (*CommandRoutine)(CANMessage *, ControllerBase *,
+                                        ErrorEntry *);
+extern CommandRoutine papyrus_cmdrun_table[256];
+extern CommandRoutine papyrus_cmdresp_table[256];
+extern CANMsgLen papyrus_cmd_lens[256];
+
+#define PAPYRUS_TODO_CAN_RXFIFO 1
+extern uint32_t papyrus_todo_flags;
+
+void papyrus_handle_todos(ControllerBase *base, uint32_t flags,
+                          ErrorEntry *err);
 
 /* Function Prototypes - Base Controller Functions */
 
@@ -110,5 +113,3 @@ PapyrusStatus controller_base_load_config(ControllerBase *controller);
  * @return PAPYRUS_OK on success
  */
 PapyrusStatus controller_base_save_config(ControllerBase *controller);
-
-#endif /* CONTROLLER_BASE_H */

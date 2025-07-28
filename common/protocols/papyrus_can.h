@@ -52,8 +52,9 @@ typedef struct {
  * Bits [7-0]: Controller ID (8 bits)
  */
 
-#define CAN_CONTROLLER_ID(id) (board_id_t)((id) & 0xFF)
-#define CAN_MESSAGE_TYPE(id) (msg_type_t)(((id) >> 8) & 0x07)
+#define CAN_CONTROLLER_ID(id) (BoardID)((id) & 0xFF)
+#define CAN_MESSAGE_TYPE(id) (MsgType)(((id) >> 8) & 0x07)
+#define CAN_GENERATE_ID(cid, mtype) (uint32_t)((cid) | ((mtype) << 8))
 
 /* Message Types (Priority Levels) */
 typedef enum {
@@ -70,20 +71,6 @@ typedef enum {
 /* Board IDs */
 typedef uint8_t BoardID;
 
-/* System Commands (Block 0)*/
-typedef enum {
-  SYSCMD_PING = 0x00,
-  SYSCMD_QUERY_TYPE = 0x01,
-  SYSCMD_REASSIGN_ID = 0x02,
-  SYSCMD_RAW_IO = 0x03,
-  SYSCMD_RESET = 0x04,
-  SYSCMD_NAME = 0x05,
-  SYSCMD_NOTIFICATION = 0x06,
-  SYSCMD_SUPPORTED = 0x07,
-  SYSCMD_GET_ERROR = 0x08,
-  SYSCMD_STATE = 0x09,
-} SystemCommand;
-
 /* Generic Sensor Commands (Block 1)*/
 typedef enum {
   SENSOR_READ = 0x10,
@@ -97,6 +84,7 @@ typedef enum {
   ERROR_UNKNOWN,          // Unknown error
   ERROR_CRITICAL,         // Unknown critical error
   ERROR_CAN_BUS,          // CAN bus failure
+  ERROR_COMMAND,          // Command format was invalid
   ERROR_HARDWARE,         // Hardware configuration error
   ERROR_MEMORY,           // Internal memory problem
   ERROR_CONTROLLER_POWER, // Controller power supply problem
@@ -112,10 +100,19 @@ typedef enum {
   ERROR_DATA_STORAGE,     // Onboard data storage fault
 } ErrorCode;
 
+/* Error Condition Entry */
+typedef struct {
+  ErrorCode err;
+  uint8_t target;
+  uint32_t timestamp;
+} ErrorEntry;
+
+typedef enum { MSGLEN_SHORT, MSGLEN_LONG, MSGLEN_SHORT_BULKDATA } CANMsgLen;
+
 /* Placeholder Headers */
 
 /* CAN Message Structure */
-typedef struct {
+struct CANMessage {
   union {
     FDCAN_RxHeaderTypeDef rHeader; // Message header (ID, etc.)
     FDCAN_TxHeaderTypeDef tHeader; // Message header for transmission
@@ -130,7 +127,7 @@ typedef struct {
           uint8_t long_args[CAN_MAX_DATA_LENGTH - 2];
         };
       };
-    };
+    } __attribute__((packed));
     struct {
       union {
         uint8_t short_data[CAN_MAX_DATA_LENGTH];
@@ -139,10 +136,22 @@ typedef struct {
           uint8_t long_data[CAN_MAX_DATA_LENGTH - 1];
         };
       };
-    } msg;
+    } __attribute__((packed));
     uint8_t raw_data[CAN_MAX_DATA_LENGTH];
-  } __attribute__((packed));
-} CANMessage;
+  } msg;
+  struct CANMessage *next;
+};
+typedef struct CANMessage CANMessage;
 /* Function Prototypes */
 
+#define COMMAND_PROTO(command)                                                 \
+  PapyrusStatus run_##command(CANMessage *msg, ControllerBase *controller,     \
+                              ErrorEntry *err);                                \
+  PapyrusStatus resp_##command(CANMessage *msg, ControllerBase *controller,    \
+                               ErrorEntry *err);
+
+bool matches_transaction(CANMessage *trans, CANMessage *newest);
+void append_transaction(CANMessage *trans, CANMessage *newest);
+bool transaction_finished(CANMessage *trans);
+void destroy_transaction(CANMessage *trans);
 #endif /* PAPYRUS_CAN_H */

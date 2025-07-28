@@ -5,9 +5,9 @@
  * @date 2024
  */
 
-#ifndef PAPYRUS_HARDWARE_H
-#define PAPYRUS_HARDWARE_H
+#pragma once
 
+#include "papyrus_can.h"
 #include "papyrus_utils.h"
 #include "stm32c0xx_hal_dma.h"
 #include "stm32c0xx_hal_fdcan.h"
@@ -42,4 +42,6 @@ typedef struct {
   uint16_t can_timeout_ms;
 } PapyrusCAN;
 
-#endif /* PAPYRUS_HARDWARE_H */
+PapyrusStatus controller_spi_init(PapyrusSPI *spi);
+PapyrusStatus controller_fdcan_init(PapyrusCAN *can);
+void papyrus_prep_theader(FDCAN_TxHeaderTypeDef *tHeader);

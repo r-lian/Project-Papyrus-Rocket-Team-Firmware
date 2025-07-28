@@ -1,9 +1,11 @@
 
 #include "controller_base.h"
+#include "papyrus_can.h"
 #include "papyrus_hardware.h"
 #include "papyrus_utils.h"
 #include "stm32c092xx.h"
 #include "stm32c0xx_hal.h"
+#include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_gpio.h"
 #include "stm32c0xx_hal_spi.h"
 #include "stm32c0xx_hal_uart.h"
@@ -57,26 +59,6 @@ int SystemClock_Config(void) {
 }
 void SysTick_Handler(void) { HAL_IncTick(); }
 
-PapyrusStatus tc_spi_init(PapyrusSPI spi) {
-  spi.handle.Instance = SPI1;
-  spi.handle.Init.Mode = SPI_MODE_MASTER;
-  spi.handle.Init.Direction = SPI_DIRECTION_2LINES;
-  spi.handle.Init.DataSize = SPI_DATASIZE_8BIT;
-  spi.handle.Init.CLKPolarity = SPI_POLARITY_LOW;
-  spi.handle.Init.CLKPhase = SPI_PHASE_1EDGE;
-  spi.handle.Init.NSS = SPI_NSS_SOFT;
-  spi.handle.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_2;
-  spi.handle.Init.FirstBit = SPI_FIRSTBIT_MSB;
-  spi.handle.Init.TIMode = SPI_TIMODE_DISABLE;
-  spi.handle.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-  spi.handle.Init.CRCPolynomial = 7;
-  spi.handle.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
-  spi.handle.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
-  if (HAL_SPI_Init(&spi.handle) != HAL_OK)
-    return PAPYRUS_ERROR_HARDWARE;
-  return PAPYRUS_OK;
-}
-
 PapyrusStatus tc_controller_init(TCController *tc_ctrl) {
   PapyrusStatus err;
   tc_ctrl->base.controller_type = CONTROLLER_TYPE_THERMOCOUPLE;
@@ -101,14 +83,17 @@ PapyrusStatus tc_hardware_init(TCController *tc_ctrl) {
   tc_ctrl->flash_spi.miso = TC_SPI_MISO;
   tc_ctrl->flash_spi.sck = TC_SPI_SCK;
   tc_ctrl->flash_spi.cs = TC_SPI_FLASH_CS;
-  FORWARD_ERR(tc_spi_init(tc_ctrl->flash_spi));
+  FORWARD_ERR(controller_spi_init(&tc_ctrl->flash_spi));
   for (int i = 0; i < TC_MAX_CHANNELS; i++) {
     tc_ctrl->tc_spis[i].mosi = TC_SPI_MOSI;
     tc_ctrl->tc_spis[i].miso = TC_SPI_MISO;
     tc_ctrl->tc_spis[i].sck = TC_SPI_SCK;
     tc_ctrl->tc_spis[i].cs = TC_SPI_TC_CS[i];
-    FORWARD_ERR(tc_spi_init(tc_ctrl->tc_spis[i]));
+    FORWARD_ERR(controller_spi_init(&tc_ctrl->tc_spis[i]));
   }
+
+  // Configure CAN bus
+  FORWARD_ERR(controller_fdcan_init(&tc_ctrl->base.can));
 
   return PAPYRUS_OK;
 }
@@ -182,6 +167,45 @@ void HAL_SPI_MspDeInit(SPI_HandleTypeDef *hspi) {
     HAL_GPIO_DeInit(GPIOA, TC_SPI_MISO.pin | TC_SPI_MOSI.pin | TC_SPI_SCK.pin);
   }
 }
+
+void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef *hfdcan) {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+  if (hfdcan->Instance == FDCAN1) {
+    /** Initializes the peripherals clocks
+     */
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_FDCAN1;
+    PeriphClkInit.Fdcan1ClockSelection = RCC_FDCAN1CLKSOURCE_PCLK1;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) {
+      Error_Handler();
+    }
+    /* Peripheral clock enable */
+    __HAL_RCC_FDCAN1_CLK_ENABLE();
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    GPIO_InitStruct.Pin = GPIO_PIN_12;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF4_FDCAN1;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+    GPIO_InitStruct.Pin = GPIO_PIN_5;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF4_FDCAN1;
+    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  }
+}
+
+void HAL_FDCAN_MspDeInit(FDCAN_HandleTypeDef *hfdcan) {
+  if (hfdcan->Instance == FDCAN1) {
+    __HAL_RCC_FDCAN1_CLK_DISABLE();
+    HAL_GPIO_DeInit(GPIOA, GPIO_PIN_12);
+    HAL_GPIO_DeInit(GPIOB, GPIO_PIN_5);
+  }
+}
+
 void Error_Handler() {
 
   for (;;)

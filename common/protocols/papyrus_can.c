@@ -9,6 +9,8 @@
 #include "papyrus_utils.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /* CRC8 lookup table for fast checksum calculation */
 static const uint8_t crc8_table[256] = {
@@ -47,4 +49,49 @@ uint8_t can_calculate_crc8(const uint8_t *data, uint8_t length) {
   }
 
   return crc;
+}
+
+bool matches_transaction(CANMessage *trans, CANMessage *newest) {
+  if (trans->msg.command_id != newest->msg.command_id ||
+      trans->rHeader.Identifier != newest->rHeader.Identifier)
+    return false;
+  uint8_t need_next_blkid = 1;
+  uint8_t newest_blkid;
+  MsgType newest_type = CAN_MESSAGE_TYPE(newest->rHeader.Identifier);
+  if (newest_type == MSG_TYPE_COMMAND || newest_type == MSG_TYPE_EMERGENCY ||
+      newest_type == MSG_TYPE_PRIORITY) {
+    newest_blkid = newest->msg.arg_block_id & 0x7F;
+  } else {
+    newest_blkid = newest->msg.data_block_id & 0x7F;
+  }
+  while (trans->next != NULL) {
+    need_next_blkid++;
+    trans = trans->next;
+  }
+  return newest_blkid == need_next_blkid;
+}
+void append_transaction(CANMessage *trans, CANMessage *newest) {
+  while (trans->next != NULL) {
+    trans = trans->next;
+  }
+  trans->next = malloc(sizeof(CANMessage));
+  memcpy(trans->next, newest, sizeof(CANMessage));
+}
+bool transaction_finished(CANMessage *trans) {
+  MsgType trans_type = CAN_MESSAGE_TYPE(trans->rHeader.Identifier);
+  while (trans->next != NULL) {
+    trans = trans->next;
+  }
+  if (trans_type == MSG_TYPE_COMMAND || trans_type == MSG_TYPE_EMERGENCY ||
+      trans_type == MSG_TYPE_PRIORITY) {
+    return (trans->msg.arg_block_id & 0x80) != 0;
+  }
+  return (trans->msg.data_block_id & 0x80) != 0;
+}
+void destroy_transaction(CANMessage *trans) {
+  if (trans == NULL)
+    return;
+  if (trans->next != NULL)
+    destroy_transaction(trans->next);
+  free(trans);
 }
