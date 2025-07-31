@@ -26,6 +26,23 @@ const PapyrusGPIO TC_SPI_TC_CS[] = {
 const PapyrusGPIO TC_UART_RX = {GPIOA, GPIO_PIN_13};
 const PapyrusGPIO TC_UART_TX = {GPIOA, GPIO_PIN_14};
 
+UART_HandleTypeDef huart;
+
+#define ENABLE_UART
+
+int __io_putchar(char ch) {
+  HAL_UART_Transmit(&huart, (uint8_t *)&ch, 1, 10);
+  return ch;
+}
+int __io_getchar(void) {
+  uint8_t ch = 0;
+  __HAL_UART_CLEAR_OREFLAG(stdio_uart);
+
+  HAL_UART_Receive(stdio_uart, &ch, 1, 0xFFFF);
+  HAL_UART_Transmit(stdio_uart, &ch, 1, 0xFFFF);
+  return ch;
+}
+
 int SystemClock_Config(void) {
   RCC_OscInitTypeDef RCC_OscInitStruct = {0};
   RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
@@ -74,9 +91,29 @@ PapyrusStatus tc_hardware_init(TCController *tc_ctrl) {
   // Initialize base controller hardware
   tc_ctrl->base.fault_indicator = TC_FAULT_LED;
   tc_ctrl->base.status_indicator = TC_STATUS_LED;
+  // tc_ctrl->base.uart.instance = USART2;
+  // tc_ctrl->base.uart.uart_baudrate = 115200;
+#ifdef ENABLE_UART
+  // tc_ctrl->base.uart.enabled = true;
+#endif
+
   FORWARD_ERR(controller_hardware_init(&tc_ctrl->base));
-  if (SystemClock_Config())
+  stdio_uart = &tc_ctrl->base.uart.handle;
+
+  huart.Instance = USART2;
+  huart.Init.BaudRate = 115200;
+  huart.Init.WordLength = UART_WORDLENGTH_8B;
+  huart.Init.StopBits = UART_STOPBITS_1;
+  huart.Init.Parity = UART_PARITY_NONE;
+  huart.Init.Mode = UART_MODE_TX_RX;
+  huart.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart.Init.OverSampling = UART_OVERSAMPLING_16;
+  huart.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
+  huart.Init.ClockPrescaler = UART_PRESCALER_DIV1;
+  huart.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
+  if (HAL_UART_Init(&huart) != HAL_OK) {
     return PAPYRUS_ERROR_HARDWARE;
+  }
 
   // Configure TC SPI bus
   tc_ctrl->flash_spi.mosi = TC_SPI_MOSI;
@@ -219,3 +256,6 @@ void HardFault_Handler(void) { Error_Handler(); }
 void SVC_Handler(void) {}
 
 void PendSV_Handler(void) {}
+
+FDCAN_HandleTypeDef *irq_fdcan;
+void FDCAN_IT0_IRQHandler(void) { HAL_FDCAN_IRQHandler(irq_fdcan); }

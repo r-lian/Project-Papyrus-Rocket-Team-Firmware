@@ -1,22 +1,23 @@
 #include "papyrus_hardware.h"
+#include "stm32c0xx_hal_cortex.h"
 #include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_spi.h"
 
-UART_HandleTypeDef stdio_uart;
-
+UART_HandleTypeDef *stdio_uart;
+/*
 int __io_putchar(char ch) {
-  HAL_UART_Transmit(&stdio_uart, (uint8_t *)&ch, 1, 10);
+  HAL_UART_Transmit(stdio_uart, (uint8_t *)&ch, 1, 10);
   return ch;
 }
 
 int __io_getchar(void) {
   uint8_t ch = 0;
-  __HAL_UART_CLEAR_OREFLAG(&stdio_uart);
+  __HAL_UART_CLEAR_OREFLAG(stdio_uart);
 
-  HAL_UART_Receive(&stdio_uart, &ch, 1, 0xFFFF);
-  HAL_UART_Transmit(&stdio_uart, &ch, 1, 0xFFFF);
+  HAL_UART_Receive(stdio_uart, &ch, 1, 0xFFFF);
+  HAL_UART_Transmit(stdio_uart, &ch, 1, 0xFFFF);
   return ch;
-}
+}*/
 
 PapyrusStatus controller_fdcan_init(PapyrusCAN *can) {
   can->handle.Instance = FDCAN1;
@@ -24,17 +25,17 @@ PapyrusStatus controller_fdcan_init(PapyrusCAN *can) {
   can->handle.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
   can->handle.Init.Mode = FDCAN_MODE_NORMAL;
   can->handle.Init.AutoRetransmission = DISABLE;
-  can->handle.Init.TransmitPause = DISABLE;
+  can->handle.Init.TransmitPause = ENABLE;
   can->handle.Init.ProtocolException = DISABLE;
-  can->handle.Init.NominalPrescaler = 16;
+  can->handle.Init.NominalPrescaler = 20;
   can->handle.Init.NominalSyncJumpWidth = 1;
-  can->handle.Init.NominalTimeSeg1 = 1;
-  can->handle.Init.NominalTimeSeg2 = 1;
+  can->handle.Init.NominalTimeSeg1 = 14;
+  can->handle.Init.NominalTimeSeg2 = 2;
   can->handle.Init.DataPrescaler = 1;
-  can->handle.Init.DataSyncJumpWidth = 1;
-  can->handle.Init.DataTimeSeg1 = 1;
-  can->handle.Init.DataTimeSeg2 = 1;
-  can->handle.Init.StdFiltersNbr = 0;
+  can->handle.Init.DataSyncJumpWidth = 4;
+  can->handle.Init.DataTimeSeg1 = 5;
+  can->handle.Init.DataTimeSeg2 = 4;
+  can->handle.Init.StdFiltersNbr = 3;
   can->handle.Init.ExtFiltersNbr = 0;
   can->handle.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
   if (HAL_FDCAN_Init(&can->handle) != HAL_OK) {
@@ -57,11 +58,32 @@ PapyrusStatus controller_fdcan_init(PapyrusCAN *can) {
   if (HAL_FDCAN_ConfigFilter(&can->handle, &sFilterConfig) != HAL_OK) {
     return PAPYRUS_ERROR_HARDWARE;
   }
+  sFilterConfig.FilterIndex = 2;
+  if (HAL_FDCAN_ConfigFilter(&can->handle, &sFilterConfig) != HAL_OK) {
+    return PAPYRUS_ERROR_HARDWARE;
+  }
+  irq_fdcan = &can->handle;
+  if (HAL_FDCAN_ActivateNotification(
+          &can->handle, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+    return PAPYRUS_ERROR_HARDWARE;
+  }
   if (HAL_FDCAN_Start(&can->handle) != HAL_OK) {
     return PAPYRUS_ERROR_HARDWARE;
   }
-  if (HAL_FDCAN_ActivateNotification(
-          &can->handle, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+
+  HAL_NVIC_SetPriority(FDCAN1_IT0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(FDCAN1_IT0_IRQn);
+  return PAPYRUS_OK;
+}
+PapyrusStatus controller_update_can_filter(PapyrusCAN *can, uint8_t new_id) {
+  FDCAN_FilterTypeDef sFilterConfig;
+  sFilterConfig.IdType = FDCAN_STANDARD_ID;
+  sFilterConfig.FilterIndex = 2;
+  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID1 = new_id;
+  sFilterConfig.FilterID2 = 0x0FF;
+  if (HAL_FDCAN_ConfigFilter(&can->handle, &sFilterConfig) != HAL_OK) {
     return PAPYRUS_ERROR_HARDWARE;
   }
   return PAPYRUS_OK;
@@ -91,7 +113,7 @@ void papyrus_prep_theader(FDCAN_TxHeaderTypeDef *tHeader) {
   tHeader->TxFrameType = FDCAN_DATA_FRAME;
   tHeader->ErrorStateIndicator = FDCAN_ESI_PASSIVE;
   tHeader->BitRateSwitch = FDCAN_BRS_OFF;
-  tHeader->FDFormat = FDCAN_FD_CAN;
+  tHeader->FDFormat = FDCAN_CLASSIC_CAN;
   tHeader->TxEventFifoControl = FDCAN_NO_TX_EVENTS;
   tHeader->MessageMarker = 0;
 }

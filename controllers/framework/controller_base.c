@@ -1,10 +1,13 @@
 #include "controller_base.h"
 #include "papyrus_can.h"
 #include "papyrus_utils.h"
+#include "stm32c092xx.h"
 #include "stm32c0xx_hal.h"
 #include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_gpio.h"
 #include <stdlib.h>
+
+extern int SystemClock_Config();
 
 uint32_t papyrus_todo_flags = 0;
 PapyrusStatus controller_base_init(ControllerBase *controller) {
@@ -28,13 +31,17 @@ PapyrusStatus controller_hardware_init(ControllerBase *controller) {
     return PAPYRUS_ERROR_HARDWARE;
   }
 
+  if (SystemClock_Config())
+    return PAPYRUS_ERROR_HARDWARE;
+
   // Initialize CAN
   // TODO
 
   // Initialize UART
   if (controller->uart.enabled) {
-    controller->uart.handle.Instance = controller->uart.instance;
-    controller->uart.handle.Init.BaudRate = controller->uart.uart_baudrate;
+    controller->uart.handle.Instance = USART2; // controller->uart.instance;
+    controller->uart.handle.Init.BaudRate =
+        115200; // controller->uart.uart_baudrate;
     controller->uart.handle.Init.WordLength = UART_WORDLENGTH_8B;
     controller->uart.handle.Init.StopBits = UART_STOPBITS_1;
     controller->uart.handle.Init.Parity = UART_PARITY_NONE;
@@ -48,6 +55,7 @@ PapyrusStatus controller_hardware_init(ControllerBase *controller) {
     if (HAL_UART_Init(&controller->uart.handle) != HAL_OK) {
       return PAPYRUS_ERROR_HARDWARE;
     }
+    stdio_uart = &controller->uart.handle;
   }
 
   // Initialize LEDs
@@ -70,6 +78,7 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
   UNUSED(hfdcan);
   if (RxFifo0ITs & FDCAN_IT_RX_FIFO0_NEW_MESSAGE) {
     papyrus_todo_flags |= PAPYRUS_TODO_CAN_RXFIFO;
+    // TODO: add some special handling for emergency priorities
   }
 }
 

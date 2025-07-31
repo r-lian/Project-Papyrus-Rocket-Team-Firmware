@@ -83,7 +83,7 @@ IO_SOURCES = $(wildcard $(CONTROLLERS_DIR)/io_controller/*.c)
 GS_SOURCES = $(wildcard $(GROUND_STATION_DIR)/firmware/*.c)
 DEBUGGER_SOURCES = $(wildcard $(BUS_DEBUGGER_DIR)/firmware/*.c)
 CDRIVER_SOURCES = $(wildcard $(DRIVERS_DIR)/stm32c0xx/*.c)
-CONTROLLERS_EXTRA_SOURCES = $(wildcard $(CONTROLLERS_DIR)/framework/*.c) $(wildcard $(CONTROLLERS_DIR)/target/*.c)
+CONTROLLERS_EXTRA_SOURCES = $(wildcard $(CONTROLLERS_DIR)/framework/*.c) $(wildcard $(CONTROLLERS_DIR)/target/*.c) $(wildcard $(CONTROLLERS_DIR)/devices/*.c)
 
 # Object Files
 COMMON_OBJECTS = $(COMMON_SOURCES:%.c=$(BUILD_COMMON)/%.o)
@@ -237,7 +237,7 @@ $(BUILD_MAIN)/%.o: %.c | $(BUILD_MAIN)
 $(BUILD_CONTROLLER)/%.o $(BUILD_SERVO)/%.o $(BUILD_TC)/%.o $(BUILD_IO)/%.o: %.c
 	@mkdir -p $(dir $@)
 	@echo "Compiling $< for controller..."
-	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I$(CONTROLLERS_DIR)/framework -I $(CONTROLLERS_DIR)/target $(OPT_FLAGS) -c $< -o $@
+	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I$(CONTROLLERS_DIR)/framework -I $(CONTROLLERS_DIR)/target -I$(CONTROLLERS_DIR)/devices $(OPT_FLAGS) -c $< -o $@
 
 # Ground station object compilation
 $(BUILD_GS)/%.o: %.c | $(BUILD_GS)

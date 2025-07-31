@@ -15,17 +15,21 @@
 #include "stm32c0xx_hal.h"
 #include "stm32c0xx_hal_spi.h"
 #include "stm32c0xx_hal_uart.h"
+#include "tc_amplifier_max31855.h"
 #include <stdbool.h>
 #include <stdint.h>
 
 void Error_Handler();
 
-int __io_getchar(void);
+#define ENABLE_UART
+extern UART_HandleTypeDef huart;
 
 /* Thermocouple Configuration */
 #define TC_MAX_CHANNELS 3  // Maximum TCs per controller
 #define TC_MAX_TEMP_C 1200 // Maximum measurable temperature
 #define TC_MIN_TEMP_C -200 // Minimum measurable temperature
+
+// #define ENABLE_UART
 
 /* Hardware Definition */
 extern const PapyrusGPIO TC_FAULT_LED;
@@ -51,16 +55,10 @@ typedef enum {
   TC_TYPE_B      // Type B (Platinum-Rhodium/Platinum-Rhodium)
 } TCType;
 
-#define TC_FAULT_OPEN 1
-#define TC_FAULT_SHORT_GND 2
-#define TC_FAULT_SHORT_VCC 3
-
-typedef int16_t
-    TCTempRead; // Thermocouple temperature reading in 1/4 of degree C
-#define TC_READ_TO_C(t) ((t) / 4)
-typedef int16_t
-    TCCjcRead; // Thermocouple cold junction reading in 1/16 of degree C
-#define TC_CJC_TO_C(t) ((t) / 16)
+typedef int32_t
+    TCTempRead; // Thermocouple temperature reading, 16.16 fixed point
+typedef int32_t
+    TCCjcRead; // Thermocouple cold junction reading, 16.16 fixed point
 
 /* Thermocouple Controller Specific Configuration */
 typedef struct {

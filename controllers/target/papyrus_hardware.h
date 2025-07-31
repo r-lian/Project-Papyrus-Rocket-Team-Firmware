@@ -14,7 +14,8 @@
 #include "stm32c0xx_hal_spi.h"
 #include "stm32c0xx_hal_uart.h"
 
-extern UART_HandleTypeDef stdio_uart;
+extern UART_HandleTypeDef *stdio_uart;
+extern FDCAN_HandleTypeDef *irq_fdcan;
 typedef struct {
   UART_HandleTypeDef handle;
   USART_TypeDef *instance;
@@ -45,3 +46,7 @@ typedef struct {
 PapyrusStatus controller_spi_init(PapyrusSPI *spi);
 PapyrusStatus controller_fdcan_init(PapyrusCAN *can);
 void papyrus_prep_theader(FDCAN_TxHeaderTypeDef *tHeader);
+PapyrusStatus controller_update_can_filter(PapyrusCAN *can, uint8_t new_id);
+
+int __io_getchar(void);
+int __io_putchar(char ch);
