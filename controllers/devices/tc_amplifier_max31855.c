@@ -5,7 +5,8 @@
 
 PapyrusStatus max31855_read_tc(PapyrusSPI *spi, MAX31855Output *out) {
   HAL_GPIO_WritePin(GPIO(spi->cs), GPIO_PIN_RESET);
-  if (HAL_SPI_Receive(&spi->handle, out->read_bytes, 4, 100) != HAL_OK) {
+  if ((out->last_hw_err =
+           HAL_SPI_Receive(&spi->handle, out->read_bytes, 4, 100)) != HAL_OK) {
     out->err_flags = TC_FAULT_SPI_FAILED;
     HAL_GPIO_WritePin(GPIO(spi->cs), GPIO_PIN_SET);
     return PAPYRUS_ERROR_HARDWARE;

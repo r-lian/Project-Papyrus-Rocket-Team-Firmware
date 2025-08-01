@@ -46,4 +46,10 @@ typedef struct {
   if ((err = stmt) != PAPYRUS_OK)                                              \
     return err;
 
+typedef int32_t fixed32;
+
+static inline float fixed_to_float(fixed32 x) { return ((float)x) / 65536.0; }
+
+static inline fixed32 float_to_fixed(float x) { return (fixed32)(x * 65536.0); }
+
 #endif /* PAPYRUS_UTILS_H */

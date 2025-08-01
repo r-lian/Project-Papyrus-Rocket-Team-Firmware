@@ -1,23 +1,11 @@
 #include "papyrus_hardware.h"
+#include "papyrus_utils.h"
 #include "stm32c0xx_hal_cortex.h"
 #include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_spi.h"
+#include <string.h>
 
 UART_HandleTypeDef *stdio_uart;
-/*
-int __io_putchar(char ch) {
-  HAL_UART_Transmit(stdio_uart, (uint8_t *)&ch, 1, 10);
-  return ch;
-}
-
-int __io_getchar(void) {
-  uint8_t ch = 0;
-  __HAL_UART_CLEAR_OREFLAG(stdio_uart);
-
-  HAL_UART_Receive(stdio_uart, &ch, 1, 0xFFFF);
-  HAL_UART_Transmit(stdio_uart, &ch, 1, 0xFFFF);
-  return ch;
-}*/
 
 PapyrusStatus controller_fdcan_init(PapyrusCAN *can) {
   can->handle.Instance = FDCAN1;
@@ -89,6 +77,7 @@ PapyrusStatus controller_update_can_filter(PapyrusCAN *can, uint8_t new_id) {
   return PAPYRUS_OK;
 }
 PapyrusStatus controller_spi_init(PapyrusSPI *spi) {
+  memset(&spi->handle.Instance, 0, sizeof(SPI_HandleTypeDef));
   spi->handle.Instance = SPI1;
   spi->handle.Init.Mode = SPI_MODE_MASTER;
   spi->handle.Init.Direction = SPI_DIRECTION_2LINES;
@@ -105,6 +94,13 @@ PapyrusStatus controller_spi_init(PapyrusSPI *spi) {
   spi->handle.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
   if (HAL_SPI_Init(&spi->handle) != HAL_OK)
     return PAPYRUS_ERROR_HARDWARE;
+  GPIO_InitTypeDef gpio_init = {0};
+  gpio_init.Pin = spi->cs.pin;
+  gpio_init.Mode = GPIO_MODE_OUTPUT_PP;
+  gpio_init.Pull = GPIO_NOPULL;
+  gpio_init.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(spi->cs.grp, &gpio_init);
+  HAL_GPIO_WritePin(GPIO(spi->cs), GPIO_PIN_SET);
   return PAPYRUS_OK;
 }
 

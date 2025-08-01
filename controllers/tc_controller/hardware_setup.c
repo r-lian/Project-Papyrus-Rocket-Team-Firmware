@@ -26,12 +26,10 @@ const PapyrusGPIO TC_SPI_TC_CS[] = {
 const PapyrusGPIO TC_UART_RX = {GPIOA, GPIO_PIN_13};
 const PapyrusGPIO TC_UART_TX = {GPIOA, GPIO_PIN_14};
 
-UART_HandleTypeDef huart;
-
 #define ENABLE_UART
 
 int __io_putchar(char ch) {
-  HAL_UART_Transmit(&huart, (uint8_t *)&ch, 1, 10);
+  HAL_UART_Transmit(stdio_uart, (uint8_t *)&ch, 1, 10);
   return ch;
 }
 int __io_getchar(void) {
@@ -39,7 +37,7 @@ int __io_getchar(void) {
   __HAL_UART_CLEAR_OREFLAG(stdio_uart);
 
   HAL_UART_Receive(stdio_uart, &ch, 1, 0xFFFF);
-  HAL_UART_Transmit(stdio_uart, &ch, 1, 0xFFFF);
+  // HAL_UART_Transmit(stdio_uart, &ch, 1, 0xFFFF);
   return ch;
 }
 
@@ -91,36 +89,17 @@ PapyrusStatus tc_hardware_init(TCController *tc_ctrl) {
   // Initialize base controller hardware
   tc_ctrl->base.fault_indicator = TC_FAULT_LED;
   tc_ctrl->base.status_indicator = TC_STATUS_LED;
-  // tc_ctrl->base.uart.instance = USART2;
-  // tc_ctrl->base.uart.uart_baudrate = 115200;
+  tc_ctrl->base.uart.instance = USART2;
+  tc_ctrl->base.uart.uart_baudrate = 115200;
 #ifdef ENABLE_UART
-  // tc_ctrl->base.uart.enabled = true;
+  tc_ctrl->base.uart.enabled = true;
+#else
+  tc_ctrl->base.uart.enabled = false;
 #endif
 
   FORWARD_ERR(controller_hardware_init(&tc_ctrl->base));
-  stdio_uart = &tc_ctrl->base.uart.handle;
-
-  huart.Instance = USART2;
-  huart.Init.BaudRate = 115200;
-  huart.Init.WordLength = UART_WORDLENGTH_8B;
-  huart.Init.StopBits = UART_STOPBITS_1;
-  huart.Init.Parity = UART_PARITY_NONE;
-  huart.Init.Mode = UART_MODE_TX_RX;
-  huart.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart.Init.OverSampling = UART_OVERSAMPLING_16;
-  huart.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-  huart.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-  huart.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-  if (HAL_UART_Init(&huart) != HAL_OK) {
-    return PAPYRUS_ERROR_HARDWARE;
-  }
 
   // Configure TC SPI bus
-  tc_ctrl->flash_spi.mosi = TC_SPI_MOSI;
-  tc_ctrl->flash_spi.miso = TC_SPI_MISO;
-  tc_ctrl->flash_spi.sck = TC_SPI_SCK;
-  tc_ctrl->flash_spi.cs = TC_SPI_FLASH_CS;
-  FORWARD_ERR(controller_spi_init(&tc_ctrl->flash_spi));
   for (int i = 0; i < TC_MAX_CHANNELS; i++) {
     tc_ctrl->tc_spis[i].mosi = TC_SPI_MOSI;
     tc_ctrl->tc_spis[i].miso = TC_SPI_MISO;
@@ -128,6 +107,11 @@ PapyrusStatus tc_hardware_init(TCController *tc_ctrl) {
     tc_ctrl->tc_spis[i].cs = TC_SPI_TC_CS[i];
     FORWARD_ERR(controller_spi_init(&tc_ctrl->tc_spis[i]));
   }
+  tc_ctrl->flash_spi.mosi = TC_SPI_MOSI;
+  tc_ctrl->flash_spi.miso = TC_SPI_MISO;
+  tc_ctrl->flash_spi.sck = TC_SPI_SCK;
+  tc_ctrl->flash_spi.cs = TC_SPI_FLASH_CS;
+  FORWARD_ERR(controller_spi_init(&tc_ctrl->flash_spi));
 
   // Configure CAN bus
   FORWARD_ERR(controller_fdcan_init(&tc_ctrl->base.can));
@@ -183,6 +167,8 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi) {
     __HAL_RCC_SPI1_CLK_ENABLE();
 
     __HAL_RCC_GPIOA_CLK_ENABLE();
+    __HAL_RCC_GPIOB_CLK_ENABLE();
+    __HAL_RCC_GPIOC_CLK_ENABLE();
     GPIO_InitStruct.Pin = TC_SPI_MISO.pin | TC_SPI_MOSI.pin | TC_SPI_SCK.pin;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;

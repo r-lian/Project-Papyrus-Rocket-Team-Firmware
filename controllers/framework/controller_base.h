@@ -53,7 +53,6 @@ typedef struct {
 typedef struct {
   /* Configuration and Status */
   BoardID board_id;
-  ControllerType controller_type;
   uint8_t board_revision;
   uint8_t firmware_revision;
   BoardStatus status;
@@ -69,6 +68,7 @@ typedef struct {
   /* Indicator GPIOs */
   PapyrusGPIO fault_indicator;
   PapyrusGPIO status_indicator;
+  ControllerType controller_type;
 
 } ControllerBase;
 
@@ -81,8 +81,7 @@ extern CANMsgLen papyrus_cmd_lens[256];
 #define PAPYRUS_TODO_CAN_RXFIFO 1
 extern uint32_t papyrus_todo_flags;
 
-void papyrus_handle_todos(ControllerBase *base, uint32_t flags,
-                          ErrorEntry *err);
+void papyrus_process_can_command(ControllerBase *base, ErrorEntry *err);
 
 /* Function Prototypes - Base Controller Functions */
 
@@ -113,3 +112,6 @@ PapyrusStatus controller_base_load_config(ControllerBase *controller);
  * @return PAPYRUS_OK on success
  */
 PapyrusStatus controller_base_save_config(ControllerBase *controller);
+
+void lock_command_lock();
+void unlock_command_lock();
