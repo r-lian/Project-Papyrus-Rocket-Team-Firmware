@@ -8,10 +8,11 @@
 UART_HandleTypeDef *stdio_uart;
 
 PapyrusStatus controller_fdcan_init(PapyrusCAN *can) {
+  memset(&can->handle, 0, sizeof(FDCAN_HandleTypeDef));
   can->handle.Instance = FDCAN1;
   can->handle.Init.ClockDivider = FDCAN_CLOCK_DIV1;
   can->handle.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
-  can->handle.Init.Mode = FDCAN_MODE_NORMAL;
+  can->handle.Init.Mode = FDCAN_MODE_INTERNAL_LOOPBACK; // FDCAN_MODE_NORMAL;
   can->handle.Init.AutoRetransmission = DISABLE;
   can->handle.Init.TransmitPause = ENABLE;
   can->handle.Init.ProtocolException = DISABLE;
@@ -29,7 +30,7 @@ PapyrusStatus controller_fdcan_init(PapyrusCAN *can) {
   if (HAL_FDCAN_Init(&can->handle) != HAL_OK) {
     return PAPYRUS_ERROR_HARDWARE;
   }
-  FDCAN_FilterTypeDef sFilterConfig;
+  FDCAN_FilterTypeDef sFilterConfig = {0};
 
   /* Configure Rx filter */
   sFilterConfig.IdType = FDCAN_STANDARD_ID;

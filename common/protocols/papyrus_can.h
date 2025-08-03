@@ -85,7 +85,9 @@ typedef enum {
   ERROR_CRITICAL,         // Unknown critical error
   ERROR_CAN_BUS,          // CAN bus failure
   ERROR_COMMAND,          // Command format was invalid
-  ERROR_HARDWARE,         // Hardware configuration error
+  ERROR_PARAM_RANGE,      // Param was out of range
+  ERROR_INTERFACE,        // Hardware interface error
+  ERROR_HARDWARE,         // Physical hardware fault
   ERROR_MEMORY,           // Internal memory problem
   ERROR_CONTROLLER_POWER, // Controller power supply problem
   ERROR_DEVICE_POWER,     // Device power supply problem
@@ -147,8 +149,8 @@ typedef struct CANMessage CANMessage;
 #define COMMAND_PROTO(command)                                                 \
   PapyrusStatus run_##command(CANMessage *msg, ControllerBase *controller,     \
                               ErrorEntry *err);                                \
-  PapyrusStatus resp_##command(CANMessage *msg, ControllerBase *controller,    \
-                               ErrorEntry *err);
+  PapyrusStatus resp_##command(CANMessage *msg, CANMessage *resp,              \
+                               ControllerBase *controller, ErrorEntry *err);
 
 bool matches_transaction(CANMessage *trans, CANMessage *newest);
 void append_transaction(CANMessage *trans, CANMessage *newest);

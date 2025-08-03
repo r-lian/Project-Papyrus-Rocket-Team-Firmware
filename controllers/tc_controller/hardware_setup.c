@@ -26,8 +26,6 @@ const PapyrusGPIO TC_SPI_TC_CS[] = {
 const PapyrusGPIO TC_UART_RX = {GPIOA, GPIO_PIN_13};
 const PapyrusGPIO TC_UART_TX = {GPIOA, GPIO_PIN_14};
 
-#define ENABLE_UART
-
 int __io_putchar(char ch) {
   HAL_UART_Transmit(stdio_uart, (uint8_t *)&ch, 1, 10);
   return ch;
@@ -78,6 +76,15 @@ PapyrusStatus tc_controller_init(TCController *tc_ctrl) {
   PapyrusStatus err;
   tc_ctrl->base.controller_type = CONTROLLER_TYPE_THERMOCOUPLE;
   tc_ctrl->base.board_revision = 0;
+  for (int i = 0; i < TC_MAX_CHANNELS; i++) {
+    tc_ctrl->tc_config.tc_type[i] = TC_TYPE_K;
+    tc_ctrl->tc_config.temp_alarm_high_c[i] = FIXED32_MAX;
+    tc_ctrl->tc_config.temp_alarm_low_c[i] = FIXED32_MIN;
+    tc_ctrl->tc_config.tc_read_format[i] = TC_FMT_FIXED1616;
+    tc_ctrl->tc_config.stream_enabled[i] = false;
+  }
+  tc_ctrl->tc_config.cjc_diff_alarm = FIXED32_MAX;
+  tc_ctrl->tc_config.num_tcs_active = 1; // TODO back to 0;
   FORWARD_ERR(controller_base_init(&tc_ctrl->base));
   FORWARD_ERR(tc_hardware_init(tc_ctrl));
   return PAPYRUS_OK;
@@ -94,6 +101,7 @@ PapyrusStatus tc_hardware_init(TCController *tc_ctrl) {
 #ifdef ENABLE_UART
   tc_ctrl->base.uart.enabled = true;
 #else
+#error no uart
   tc_ctrl->base.uart.enabled = false;
 #endif
 

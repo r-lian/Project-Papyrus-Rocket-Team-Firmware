@@ -72,10 +72,12 @@ typedef struct {
 
 } ControllerBase;
 
-typedef PapyrusStatus (*CommandRoutine)(CANMessage *, ControllerBase *,
-                                        ErrorEntry *);
-extern CommandRoutine papyrus_cmdrun_table[256];
-extern CommandRoutine papyrus_cmdresp_table[256];
+typedef PapyrusStatus (*CommandRunner)(CANMessage *, ControllerBase *,
+                                       ErrorEntry *);
+typedef PapyrusStatus (*CommandResponder)(CANMessage *, CANMessage *,
+                                          ControllerBase *, ErrorEntry *);
+extern CommandRunner papyrus_cmdrun_table[256];
+extern CommandResponder papyrus_cmdresp_table[256];
 extern CANMsgLen papyrus_cmd_lens[256];
 
 #define PAPYRUS_TODO_CAN_RXFIFO 1

@@ -6,6 +6,7 @@
  */
 #include "tc_controller.h"
 #include "commands_sys0.h"
+#include "commands_tc1.h"
 #include "controller_base.h"
 #include "papyrus_can.h"
 #include "papyrus_hardware.h"
@@ -16,52 +17,61 @@
 #include "stm32c0xx_hal_tim.h"
 #include "stm32c0xx_hal_uart.h"
 #include "tc_amplifier_max31855.h"
-#include <stdio.h>
 #include <string.h>
 
 TCController this;
-CommandRoutine papyrus_cmdrun_table[256];
-CommandRoutine papyrus_cmdresp_table[256];
+CommandRunner papyrus_cmdrun_table[256];
+CommandResponder papyrus_cmdresp_table[256];
 CANMsgLen papyrus_cmd_lens[256];
 
 extern void uart_debugger(TCController *this);
+
+int32_t to_tc_format(TCTempRead internal, TCReadFormat target) {
+  switch (target) {
+  case TC_FMT_INT8_SHIFT:
+    return internal >> 20;
+  case TC_FMT_INT16:
+    return internal >> 16;
+  case TC_FMT_FIXED88:
+    return (internal >> 8) & 0xFFFF;
+  case TC_FMT_FIXED1616:
+    return internal;
+  }
+  return 0;
+}
+TCTempRead from_tc_format(int32_t external, TCReadFormat target) {
+  switch (target) {
+  case TC_FMT_INT8_SHIFT:
+    return external << 20;
+  case TC_FMT_INT16:
+    return external << 16;
+  case TC_FMT_FIXED88:
+    return external << 8;
+  case TC_FMT_FIXED1616:
+    return external;
+  }
+  return 0;
+}
 
 int main() {
   if (tc_controller_init(&this) != PAPYRUS_OK) {
     Error_Handler();
   }
-  // load_ctable_sys0(papyrus_cmdrun_table, papyrus_cmdresp_table,
-  //                  papyrus_cmd_lens);
+  load_ctable_sys0(papyrus_cmdrun_table, papyrus_cmdresp_table,
+                   papyrus_cmd_lens);
+  load_ctable_tc1(papyrus_cmdrun_table, papyrus_cmdresp_table,
+                  papyrus_cmd_lens);
   uart_debugger(&this);
   /*
-  MAX31855Output tmp;
+  CANMessage prepmsg;
+  papyrus_prep_theader(&prepmsg.tHeader);
+  prepmsg.msg.command_id = TCCMD_READ;
+  prepmsg.tHeader.DataLength = 2;
+  prepmsg.tHeader.Identifier = CAN_GENERATE_ID(1, MSG_TYPE_COMMAND);
+  prepmsg.msg.short_args[0] = 0x01;
+  HAL_FDCAN_AddMessageToTxFifoQ(&(this.base.can.handle), &prepmsg.tHeader,
+                                prepmsg.msg.raw_data);
   for (;;) {
-    if (max31855_read_tc(&this.tc_spis[0], &tmp) != PAPYRUS_OK) {
-      printf("TC read error: ");
-      if (tmp.err_flags & TC_FAULT_OPEN)
-        printf("OPEN ");
-      if (tmp.err_flags & TC_FAULT_SHORT_GND)
-        printf("SHORT_GND ");
-      if (tmp.err_flags & TC_FAULT_SHORT_VCC)
-        printf("SHORT_VCC ");
-      if (tmp.err_flags & TC_FAULT_SPI_FAILED) {
-        if (tmp.last_hw_err == HAL_BUSY) {
-          printf("SPI_FAILED(BUSY) ");
-        } else if (tmp.last_hw_err == HAL_ERROR) {
-          printf("SPI_FAILED(ERROR) ");
-        } else if (tmp.last_hw_err == HAL_TIMEOUT) {
-          printf("SPI_FAILED(TIMEOUT) ");
-        } else {
-          printf("SPI_FAILED(");
-          printf("%02x%02x%02x%02x) ", tmp.read_bytes[0], tmp.read_bytes[1],
-                 tmp.read_bytes[2], tmp.read_bytes[3]);
-        }
-      }
-      printf("\r\n");
-    } else {
-      printf("TC read results: tc=%.2f cjc=%.2f\r\n",
-             fixed_to_float(tmp.tc_fixed), fixed_to_float(tmp.cjc_fixed));
-    }
-    HAL_Delay(400);
+    HAL_Delay(500);
   }*/
 }

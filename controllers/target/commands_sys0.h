@@ -23,10 +23,8 @@ typedef enum {
 /* Command Constructors & Executors (Block 0) */
 
 COMMAND_PROTO(sys0_ping);
-PapyrusStatus gen_sys0_ping(CANMessage *msg, uint8_t data_byte);
 COMMAND_PROTO(sys0_query_type);
-PapyrusStatus gen_sys0_query_type(CANMessage *msg);
 
-void load_ctable_sys0(CommandRoutine *runs, CommandRoutine *resps,
+void load_ctable_sys0(CommandRunner *runs, CommandResponder *resps,
                       CANMsgLen *lens);
 #endif

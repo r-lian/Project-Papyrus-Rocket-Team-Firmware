@@ -5,8 +5,7 @@
  * @date 2024
  */
 
-#ifndef TC_CONTROLLER_H
-#define TC_CONTROLLER_H
+#pragma once
 
 #include "controller_base.h"
 #include "papyrus_can.h"
@@ -55,10 +54,17 @@ typedef enum {
   TC_TYPE_B      // Type B (Platinum-Rhodium/Platinum-Rhodium)
 } TCType;
 
+typedef enum {
+  TC_FMT_INT8_SHIFT,
+  TC_FMT_INT16,
+  TC_FMT_FIXED88,
+  TC_FMT_FIXED1616
+} TCReadFormat;
+
+extern const uint8_t TC_READ_FORMAT_SIZE[];
+
 typedef int32_t
     TCTempRead; // Thermocouple temperature reading, 16.16 fixed point
-typedef int32_t
-    TCCjcRead; // Thermocouple cold junction reading, 16.16 fixed point
 
 /* Thermocouple Controller Specific Configuration */
 typedef struct {
@@ -66,23 +72,19 @@ typedef struct {
   TCType tc_type[TC_MAX_CHANNELS];
 
   /* Temperature Ranges */
-  int16_t temp_alarm_low_c[TC_MAX_CHANNELS];
-  int16_t temp_alarm_high_c[TC_MAX_CHANNELS];
-  int16_t cjc_diff_alarm;
+  TCTempRead temp_alarm_low_c[TC_MAX_CHANNELS];
+  TCTempRead temp_alarm_high_c[TC_MAX_CHANNELS];
+  TCTempRead cjc_diff_alarm;
 
-  /* Sampling Configuration */
-  uint16_t sample_rate_hz;
-  uint8_t filter_samples;
-  uint16_t filter_window_ms;
+  bool stream_enabled[TC_MAX_CHANNELS];
+  uint16_t stream_reload[TC_MAX_CHANNELS];
+  uint16_t stream_timer[TC_MAX_CHANNELS];
 
-  /* Fault Detection */
-  uint8_t tc_fault[TC_MAX_CHANNELS];
+  TCReadFormat tc_read_format[TC_MAX_CHANNELS];
 
-  /* Communication */
-  uint16_t data_report_rate_hz;
-  bool continuous_mode;
+  uint8_t num_tcs_active;
 
-} TCStatus;
+} TCConfig;
 
 /* Thermocouple Controller Class */
 typedef struct {
@@ -90,20 +92,15 @@ typedef struct {
   ControllerBase base;
 
   /* TC-specific configuration and status */
-  TCStatus tc_status;
+  TCConfig tc_config;
 
   /* Hardware interfaces */
   PapyrusSPI tc_spis[TC_MAX_CHANNELS];
   PapyrusSPI flash_spi;
 
-  /* Data processing (TODO)*/
-  int32_t filter_buffer[TC_MAX_CHANNELS][16];
-  uint8_t filter_index[TC_MAX_CHANNELS];
-  uint32_t last_conversion_time[TC_MAX_CHANNELS];
-
-  TCTempRead last_tc_values[TC_MAX_CHANNELS];
-  /* Cold Junction Compensation */
-  TCCjcRead last_cjc_values[TC_MAX_CHANNELS];
+  TCTempRead last_tc_read[TC_MAX_CHANNELS];
+  TCTempRead last_cjc_read[TC_MAX_CHANNELS];
+  uint8_t last_err_flags[TC_MAX_CHANNELS];
 
 } TCController;
 
@@ -117,51 +114,10 @@ extern TCController this;
  * @return PAPYRUS_OK on success
  */
 PapyrusStatus tc_controller_init(TCController *tc_ctrl);
-
-/**
- * @brief Main TC controller processing loop
- * @param tc_ctrl Pointer to TC controller instance
- * @return PAPYRUS_OK on success
- */
-PapyrusStatus tc_controller_process(TCController *tc_ctrl);
-
-/* Function Prototypes - Temperature Reading */
-
-/**
- * @brief Read temperature from specific thermocouple
- * @param tc_ctrl Pointer to TC controller instance
- * @param tc_id Thermocouple index
- * @return PAPYRUS_OK on success
- */
-PapyrusStatus tc_read_thermocouple(TCController *tc_ctrl, uint8_t tc_id);
-
-/* Function Prototypes - Hardware Interface */
-
-/**
- * @brief Initialize thermocouple hardware (SPI, ADC, etc.)
- * @param tc_ctrl Pointer to TC controller instance
- * @return PAPYRUS_OK on success
- */
 PapyrusStatus tc_hardware_init(TCController *tc_ctrl);
 
-/* Function Prototypes - Data Processing */
-
-/**
- * @brief Check temperature alarms
- * @param tc_ctrl Pointer to TC controller instance
- * @param tc_id Thermocouple identifier
- * @return PAPYRUS_OK on success
- */
-PapyrusStatus tc_check_alarms(TCController *tc_ctrl, uint8_t tc_id);
-
-/**
- * @brief Set sampling rate
- * @param tc_ctrl Pointer to TC controller instance
- * @param sample_rate_hz Sampling rate in Hz
- * @return PAPYRUS_OK on success
- */
-PapyrusStatus tc_set_sample_rate(TCController *tc_ctrl,
-                                 uint16_t sample_rate_hz);
+int32_t to_tc_format(TCTempRead internal, TCReadFormat target);
+TCTempRead from_tc_format(int32_t external, TCReadFormat target);
 
 /* Default Configuration Values */
 #define TC_DEFAULT_SAMPLE_RATE_HZ 10
@@ -173,5 +129,3 @@ PapyrusStatus tc_set_sample_rate(TCController *tc_ctrl,
 #define TC_DEFAULT_TEMP_MAX_C 1200
 #define TC_DEFAULT_ALARM_LOW_C -50
 #define TC_DEFAULT_ALARM_HIGH_C 500
-
-#endif /* TC_CONTROLLER_H */

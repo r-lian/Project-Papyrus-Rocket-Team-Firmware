@@ -47,6 +47,8 @@ typedef struct {
     return err;
 
 typedef int32_t fixed32;
+#define FIXED32_MAX 0x7FFFFFFF
+#define FIXED32_MIN 0x80000000
 
 static inline float fixed_to_float(fixed32 x) { return ((float)x) / 65536.0; }
 

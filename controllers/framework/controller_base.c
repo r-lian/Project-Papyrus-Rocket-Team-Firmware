@@ -6,6 +6,7 @@
 #include "stm32c0xx_hal.h"
 #include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_gpio.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -90,11 +91,20 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan,
       can_command_waiting++;
     } else {
       lock_command_lock();
-      ErrorEntry err;
+      ErrorEntry err = {ERROR_NONE, 0, 0};
       papyrus_process_can_command(&this, &err);
       unlock_command_lock();
     }
   }
+}
+
+void __attribute__((weak)) papyrus_process_can_other(CANMessage *msg,
+                                                     ControllerBase *base,
+                                                     ErrorEntry *err) {
+  UNUSED(msg);
+  UNUSED(base);
+  err->err = ERROR_CAN_BUS;
+  err->target = 0;
 }
 
 void papyrus_process_can_command(ControllerBase *base, ErrorEntry *err) {
@@ -108,15 +118,14 @@ void papyrus_process_can_command(ControllerBase *base, ErrorEntry *err) {
   MsgType mtype = CAN_MESSAGE_TYPE(newest.rHeader.Identifier);
   if (mtype != MSG_TYPE_COMMAND && mtype != MSG_TYPE_EMERGENCY &&
       mtype != MSG_TYPE_PRIORITY) {
-    err->err = ERROR_CAN_BUS;
-    err->target = 0;
+    papyrus_process_can_other(&newest, base, err);
     return;
   }
   if (papyrus_cmd_lens[newest.msg.command_id] == MSGLEN_SHORT) {
     uint8_t command_id = newest.msg.command_id;
     papyrus_cmdrun_table[command_id](&newest, base, err);
     CANMessage response;
-    papyrus_cmdresp_table[command_id](&response, base, err);
+    papyrus_cmdresp_table[command_id](&newest, &response, base, err);
     // TODO: better error checking here
     if (HAL_FDCAN_AddMessageToTxFifoQ(&base->can.handle, &response.tHeader,
                                       response.msg.raw_data) != HAL_OK) {
@@ -148,7 +157,7 @@ void papyrus_process_can_command(ControllerBase *base, ErrorEntry *err) {
       papyrus_cmdrun_table[command_id](trans, base, err);
       CANMessage response;
       destroy_transaction(trans->next);
-      papyrus_cmdresp_table[command_id](&response, base, err);
+      papyrus_cmdresp_table[command_id](trans, &response, base, err);
       // TODO: better error checking here
       if (HAL_FDCAN_AddMessageToTxFifoQ(&base->can.handle, &response.tHeader,
                                         response.msg.raw_data) != HAL_OK) {
