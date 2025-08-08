@@ -1,6 +1,7 @@
 #include "commands_sys0.h"
 #include "commands_tc1.h"
 #include "papyrus_can.h"
+#include "papyrus_hardware.h"
 #include "papyrus_utils.h"
 #include "tc_controller.h"
 #include <ctype.h>
@@ -59,6 +60,14 @@ void skip_word_ws(const char **base, char *word) {
     (*base)++;
   }
 }
+void until_next_word(const char **base) {
+  while (!isspace((int)**base)) {
+    (*base)++;
+  }
+  while (isspace((int)**base)) {
+    (*base)++;
+  }
+}
 PapyrusStatus parse_tc1_read(const char *fmt, CANMessage *out) {
   bool use_cjc = false;
   if (is_prefix(fmt, "cjc")) {
@@ -80,8 +89,178 @@ PapyrusStatus parse_tc1_read(const char *fmt, CANMessage *out) {
   out->msg.short_args[0] = ((int)use_cjc ? 0x80 : 0) | tc_id;
   return PAPYRUS_OK;
 }
+PapyrusStatus parse_tc1_stream(const char *fmt, CANMessage *out) {
+  uint8_t tc_id;
+  if (is_prefix(fmt, "all")) {
+    tc_id = 0;
+  } else {
+    tc_id = atoi(fmt);
+    if (tc_id == 0) {
+      return PAPYRUS_ERROR_PARAM;
+    }
+  }
+  until_next_word(&fmt);
+  uint16_t timer;
+  if (is_prefix(fmt, "off")) {
+    timer = 0;
+  } else {
+    timer = atoi(fmt);
+  }
+  papyrus_prep_theader(&out->tHeader);
+  out->tHeader.DataLength = 4;
+  out->msg.command_id = TCCMD_STREAM;
+  out->msg.short_args[0] = tc_id;
+  out->msg.short_args[1] = timer & 0xFF;
+  out->msg.short_args[2] = timer >> 8;
+  return PAPYRUS_OK;
+}
+PapyrusStatus parse_tc1_status(const char *fmt, CANMessage *out) {
+  uint8_t tc_id;
+  if (is_prefix(fmt, "all")) {
+    tc_id = 0;
+  } else {
+    tc_id = atoi(fmt);
+    if (tc_id == 0) {
+      return PAPYRUS_ERROR_PARAM;
+    }
+  }
+  papyrus_prep_theader(&out->tHeader);
+  out->tHeader.DataLength = 2;
+  out->msg.command_id = TCCMD_STATUS;
+  out->msg.short_args[0] = tc_id;
+  return PAPYRUS_OK;
+}
+PapyrusStatus parse_tc1_fmt(const char *fmt, CANMessage *out) {
+  uint8_t tc_id;
+  if (is_prefix(fmt, "all")) {
+    tc_id = 0;
+  } else {
+    tc_id = atoi(fmt);
+    if (tc_id == 0) {
+      return PAPYRUS_ERROR_PARAM;
+    }
+  }
+  until_next_word(&fmt);
+  TCReadFormat rfmt;
+  if (is_prefix(fmt, "int8s")) {
+    rfmt = TC_FMT_INT8_SHIFT;
+  } else if (is_prefix(fmt, "int16")) {
+    rfmt = TC_FMT_INT16;
+  } else if (is_prefix(fmt, "fixed88")) {
+    rfmt = TC_FMT_FIXED88;
+  } else if (is_prefix(fmt, "fixed1616")) {
+    rfmt = TC_FMT_FIXED1616;
+  } else {
+    return PAPYRUS_ERROR_PARAM;
+  }
+  papyrus_prep_theader(&out->tHeader);
+  out->tHeader.DataLength = 3;
+  out->msg.command_id = TCCMD_FMT;
+  out->msg.short_args[0] = tc_id;
+  out->msg.short_args[1] = rfmt;
+  return PAPYRUS_OK;
+}
+PapyrusStatus parse_tc1_count(const char *fmt, CANMessage *out) {
+  uint8_t tc_count;
+  if (isdigit((int)*fmt)) {
+    tc_count = atoi(fmt);
+  } else {
+    tc_count = 0xFF;
+  }
+  papyrus_prep_theader(&out->tHeader);
+  out->tHeader.DataLength = 2;
+  out->msg.command_id = TCCMD_COUNT;
+  out->msg.short_args[0] = tc_count;
+  return PAPYRUS_OK;
+}
+PapyrusStatus parse_tc1_type(const char *fmt, CANMessage *out) {
+  bool do_set;
+  if (is_prefix(fmt, "set")) {
+    do_set = true;
+  } else if (is_prefix(fmt, "get")) {
+    do_set = false;
+  } else {
+    return PAPYRUS_ERROR_PARAM;
+  }
+  until_next_word(&fmt);
+  uint8_t tc_id;
+  if (is_prefix(fmt, "all")) {
+    tc_id = 0;
+  } else {
+    tc_id = atoi(fmt);
+    if (tc_id == 0) {
+      return PAPYRUS_ERROR_PARAM;
+    }
+  }
+  TCType set_to = 0;
+  if (do_set) {
+    until_next_word(&fmt);
+    if (is_prefix(fmt, "K"))
+      set_to = TC_TYPE_K;
+    else if (is_prefix(fmt, "J"))
+      set_to = TC_TYPE_J;
+    else if (is_prefix(fmt, "T"))
+      set_to = TC_TYPE_T;
+    else if (is_prefix(fmt, "E"))
+      set_to = TC_TYPE_E;
+    else if (is_prefix(fmt, "N"))
+      set_to = TC_TYPE_N;
+    else if (is_prefix(fmt, "S"))
+      set_to = TC_TYPE_S;
+    else if (is_prefix(fmt, "R"))
+      set_to = TC_TYPE_R;
+    else if (is_prefix(fmt, "B"))
+      set_to = TC_TYPE_B;
+    else
+      return PAPYRUS_ERROR_PARAM;
+  }
+  papyrus_prep_theader(&out->tHeader);
+  out->tHeader.DataLength = (int)do_set ? 3 : 2;
+  out->msg.command_id = TCCMD_TYPE;
+  out->msg.short_args[0] = ((int)do_set ? 0x00 : 0x80) | tc_id;
+  out->msg.short_args[1] = set_to;
+  return PAPYRUS_OK;
+}
+PapyrusStatus parse_tc1_alarm(const char *fmt, CANMessage *out) {
+  uint8_t alm_type;
+  if (is_prefix(fmt, "low"))
+    alm_type = 0;
+  else if (is_prefix(fmt, "high"))
+    alm_type = 1;
+  else if (is_prefix(fmt, "cjc"))
+    alm_type = 2;
+  else
+    return PAPYRUS_ERROR_PARAM;
+  until_next_word(&fmt);
+  uint8_t tc_id = 0;
+  if (alm_type != 2) {
+    if (is_prefix(fmt, "all")) {
+      tc_id = 0;
+    } else {
+      tc_id = atoi(fmt);
+      if (tc_id == 0) {
+        return PAPYRUS_ERROR_PARAM;
+      }
+    }
+  }
+  until_next_word(&fmt);
+  float alm_val = atof(fmt);
+  fixed32 alm_fixed = float_to_fixed(alm_val);
+  papyrus_prep_theader(&out->tHeader);
+  out->tHeader.DataLength = 6;
+  out->msg.command_id = TCCMD_ALARM;
+  out->msg.short_args[0] = (alm_type << 6) | tc_id;
+  for (uint8_t i = 0; i < 4; i++) {
+    out->msg.short_args[1 + i] = alm_fixed & 0xFF;
+    alm_fixed >>= 8;
+  }
+  return PAPYRUS_OK;
+}
 CommandStringParser sys0_parsers[] = {parse_sys0_ping, parse_sys0_query_type};
-CommandStringParser tc1_parsers[] = {parse_tc1_read};
+CommandStringParser tc1_parsers[] = {
+    parse_tc1_read,  parse_tc1_stream, parse_tc1_status, parse_tc1_fmt,
+    nullptr,         nullptr,          nullptr,          nullptr,
+    parse_tc1_count, parse_tc1_type,   parse_tc1_alarm};
 CommandStringParser *cmd_group_parsers[] = {sys0_parsers, tc1_parsers};
 char **cmd_group_names[] = {sys0_commandnames, tc1_commandnames};
 
@@ -105,6 +284,11 @@ void papyrus_process_can_other(CANMessage *msg, ControllerBase *base,
   case MSG_TYPE_BULKDATA:
     break;
   case MSG_TYPE_STREAM:
+    printf("Stream data: ");
+    for (uint32_t i = 0; i < msg->rHeader.DataLength; i++) {
+      printf("%02x ", msg->msg.raw_data[i]);
+    }
+    printf("\r\n");
     break;
   case MSG_TYPE_NOTIF:
     break;

@@ -16,6 +16,14 @@ PapyrusStatus max31855_read_tc(PapyrusSPI *spi, MAX31855Output *out) {
     out->err_flags = TC_FAULT_SPI_FAILED;
     return PAPYRUS_ERROR_HARDWARE;
   }
+  for (int i = 0; i < 4; i++) {
+    if (out->read_bytes[i])
+      break;
+    if (i == 3) {
+      out->err_flags = TC_FAULT_SPI_FAILED;
+      return PAPYRUS_ERROR_HARDWARE;
+    }
+  }
   out->tc_temperature = (out->read_bytes[0] << 6) | (out->read_bytes[1] >> 2);
   out->cjc_temperature =
       ((int16_t)((out->read_bytes[2] << 8) | (out->read_bytes[3]))) >> 4;

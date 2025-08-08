@@ -63,15 +63,18 @@ int main() {
                   papyrus_cmd_lens);
   uart_debugger(&this);
   /*
-  CANMessage prepmsg;
-  papyrus_prep_theader(&prepmsg.tHeader);
-  prepmsg.msg.command_id = TCCMD_READ;
-  prepmsg.tHeader.DataLength = 2;
-  prepmsg.tHeader.Identifier = CAN_GENERATE_ID(1, MSG_TYPE_COMMAND);
-  prepmsg.msg.short_args[0] = 0x01;
-  HAL_FDCAN_AddMessageToTxFifoQ(&(this.base.can.handle), &prepmsg.tHeader,
-                                prepmsg.msg.raw_data);
-  for (;;) {
-    HAL_Delay(500);
-  }*/
+    CANMessage prepmsg;
+    papyrus_prep_theader(&prepmsg.tHeader);
+    prepmsg.msg.command_id = TCCMD_STREAM;
+    prepmsg.tHeader.DataLength = 4;
+    prepmsg.tHeader.Identifier = CAN_GENERATE_ID(1, MSG_TYPE_COMMAND);
+    prepmsg.msg.short_args[0] = 0x01;
+    prepmsg.msg.short_args[1] = 0xe8;
+    prepmsg.msg.short_args[2] = 0x03;
+    HAL_FDCAN_AddMessageToTxFifoQ(&(this.base.can.handle), &prepmsg.tHeader,
+                                  prepmsg.msg.raw_data);
+    for (;;) {
+      HAL_Delay(500);
+    }
+    */
 }

@@ -20,7 +20,7 @@
 
 void Error_Handler();
 
-#define ENABLE_UART
+// #define ENABLE_UART
 extern UART_HandleTypeDef huart;
 
 /* Thermocouple Configuration */
@@ -28,7 +28,7 @@ extern UART_HandleTypeDef huart;
 #define TC_MAX_TEMP_C 1200 // Maximum measurable temperature
 #define TC_MIN_TEMP_C -200 // Minimum measurable temperature
 
-// #define ENABLE_UART
+#define ENABLE_UART
 
 /* Hardware Definition */
 extern const PapyrusGPIO TC_FAULT_LED;
@@ -115,6 +115,7 @@ extern TCController this;
  */
 PapyrusStatus tc_controller_init(TCController *tc_ctrl);
 PapyrusStatus tc_hardware_init(TCController *tc_ctrl);
+void tc_controller_mstick(TCController *tc_ctrl);
 
 int32_t to_tc_format(TCTempRead internal, TCReadFormat target);
 TCTempRead from_tc_format(int32_t external, TCReadFormat target);

@@ -70,7 +70,10 @@ int SystemClock_Config(void) {
   }
   return 0;
 }
-void SysTick_Handler(void) { HAL_IncTick(); }
+void SysTick_Handler(void) {
+  HAL_IncTick();
+  tc_controller_mstick(&this);
+}
 
 PapyrusStatus tc_controller_init(TCController *tc_ctrl) {
   PapyrusStatus err;
@@ -84,7 +87,7 @@ PapyrusStatus tc_controller_init(TCController *tc_ctrl) {
     tc_ctrl->tc_config.stream_enabled[i] = false;
   }
   tc_ctrl->tc_config.cjc_diff_alarm = FIXED32_MAX;
-  tc_ctrl->tc_config.num_tcs_active = 1; // TODO back to 0;
+  tc_ctrl->tc_config.num_tcs_active = 2; // TODO back to 0;
   FORWARD_ERR(controller_base_init(&tc_ctrl->base));
   FORWARD_ERR(tc_hardware_init(tc_ctrl));
   return PAPYRUS_OK;
@@ -101,7 +104,6 @@ PapyrusStatus tc_hardware_init(TCController *tc_ctrl) {
 #ifdef ENABLE_UART
   tc_ctrl->base.uart.enabled = true;
 #else
-#error no uart
   tc_ctrl->base.uart.enabled = false;
 #endif
 

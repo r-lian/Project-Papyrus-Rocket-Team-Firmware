@@ -93,7 +93,7 @@ SERVO_OBJECTS = $(SERVO_SOURCES:%.c=$(BUILD_SERVO)/%.o) $(CONTROLLER_COMMON)
 TC_OBJECTS = $(TC_SOURCES:%.c=$(BUILD_TC)/%.o) $(CONTROLLER_COMMON)
 IO_OBJECTS = $(IO_SOURCES:%.c=$(BUILD_IO)/%.o) $(CONTROLLER_COMMON)
 GS_OBJECTS = $(GS_SOURCES:%.c=$(BUILD_GS)/%.o) $(CONTROLLER_COMMON)
-DEBUGGER_OBJECTS = $(DEBUGGER_SOURCES:%.c=$(BUILD_DEBUGGER)/%.o) $(COMMON_OBJECTS)
+DEBUGGER_OBJECTS = $(DEBUGGER_SOURCES:%.c=$(BUILD_DEBUGGER)/%.o) $(COMMON_OBJECTS) $(CDRIVER_OBJECTS) $(CONTROLLER_STARTUP:%.s=$(BUILD_COMMON)/%.o)
 CDRIVER_OBJECTS = $(CDRIVER_SOURCES:%.c=%.o)
 
 # Target Binaries
@@ -249,7 +249,7 @@ $(BUILD_GS)/%.o: %.c | $(BUILD_GS)
 $(BUILD_DEBUGGER)/%.o: %.c | $(BUILD_DEBUGGER)
 	@mkdir -p $(dir $@)
 	@echo "Compiling $< for bus debugger..."
-	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I$(BUS_DEBUGGER_DIR)/firmware $(OPT_FLAGS) -c $< -o $@
+	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I $(CONTROLLERS_DIR)/target -I$(BUS_DEBUGGER_DIR)/firmware $(OPT_FLAGS) -c $< -o $@
 
 # Create build directories
 $(BUILD_DIR) $(BUILD_COMMON) $(BUILD_MAIN) $(BUILD_SERVO) $(BUILD_TC) $(BUILD_IO) $(BUILD_GS) $(BUILD_DEBUGGER):
@@ -273,7 +273,7 @@ flash_gs: $(GS_ELF)
 	$(STLINK) write $(BUILD_GS)/ground_station.bin 0x08000000
 
 flash_debugger: $(DEBUGGER_ELF)
-	$(STLINK) write $(BUILD_DEBUGGER)/bus_debugger.bin 0x08000000
+	$(STLINK) --mass-erase --connect-under-reset write $(BUILD_DEBUGGER)/bus_debugger.bin 0x08000000
 
 # Debug targets
 .PHONY: debug_main_board debug_servo debug_tc debug_io debug_gs debug_debugger
