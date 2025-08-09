@@ -5,6 +5,7 @@
 #include "papyrus_utils.h"
 #include "stm32c092xx.h"
 #include "stm32c0xx_hal.h"
+#include "stm32c0xx_hal_adc_ex.h"
 #include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_gpio.h"
 #include "stm32c0xx_hal_spi.h"
@@ -172,17 +173,46 @@ PapyrusStatus bd_hardware_init(BusDebugger *bus_dbg) {
   if (HAL_I2C_Init(&bus_dbg->display.handle) != HAL_OK) {
     Error_Handler();
   }
-
-  /** Configure Analogue filter
-   */
   if (HAL_I2CEx_ConfigAnalogFilter(&bus_dbg->display.handle,
                                    I2C_ANALOGFILTER_ENABLE) != HAL_OK) {
     Error_Handler();
   }
-
-  /** Configure Digital filter
-   */
   if (HAL_I2CEx_ConfigDigitalFilter(&bus_dbg->display.handle, 0) != HAL_OK) {
+    Error_Handler();
+  }
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  bus_dbg->batread.handle.Instance = ADC1;
+  bus_dbg->batread.handle.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV1;
+  bus_dbg->batread.handle.Init.Resolution = ADC_RESOLUTION_12B;
+  bus_dbg->batread.handle.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  bus_dbg->batread.handle.Init.ScanConvMode = ADC_SCAN_SEQ_FIXED;
+  bus_dbg->batread.handle.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  bus_dbg->batread.handle.Init.LowPowerAutoWait = DISABLE;
+  bus_dbg->batread.handle.Init.LowPowerAutoPowerOff = DISABLE;
+  bus_dbg->batread.handle.Init.ContinuousConvMode = DISABLE;
+  bus_dbg->batread.handle.Init.NbrOfConversion = 1;
+  bus_dbg->batread.handle.Init.DiscontinuousConvMode = DISABLE;
+  bus_dbg->batread.handle.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  bus_dbg->batread.handle.Init.ExternalTrigConvEdge =
+      ADC_EXTERNALTRIGCONVEDGE_NONE;
+  bus_dbg->batread.handle.Init.DMAContinuousRequests = DISABLE;
+  bus_dbg->batread.handle.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  bus_dbg->batread.handle.Init.SamplingTimeCommon1 = ADC_SAMPLETIME_1CYCLE_5;
+  bus_dbg->batread.handle.Init.OversamplingMode = DISABLE;
+  bus_dbg->batread.handle.Init.TriggerFrequencyMode = ADC_TRIGGER_FREQ_HIGH;
+  if (HAL_ADC_Init(&bus_dbg->batread.handle) != HAL_OK) {
+    Error_Handler();
+  }
+
+  HAL_ADCEx_Calibration_Start(&bus_dbg->batread.handle);
+
+  /** Configure Regular Channel
+   */
+  sConfig.Channel = ADC_CHANNEL_2;
+  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
+  if (HAL_ADC_ConfigChannel(&bus_dbg->batread.handle, &sConfig) != HAL_OK) {
     Error_Handler();
   }
 
@@ -249,6 +279,34 @@ void HAL_I2C_MspDeInit(I2C_HandleTypeDef *hi2c) {
     HAL_GPIO_DeInit(GPIOA, BD_I2C_SDA.pin);
   }
 }
+void HAL_ADC_MspInit(ADC_HandleTypeDef *hadc) {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+  if (hadc->Instance == ADC1) {
+    PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
+    PeriphClkInit.AdcClockSelection = RCC_ADCCLKSOURCE_SYSCLK;
+    if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) {
+      Error_Handler();
+    }
+
+    __HAL_RCC_ADC_CLK_ENABLE();
+
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    GPIO_InitStruct.Pin = BD_BATREAD.pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    HAL_GPIO_Init(BD_BATREAD.grp, &GPIO_InitStruct);
+  }
+}
+
+void HAL_ADC_MspDeInit(ADC_HandleTypeDef *hadc) {
+  if (hadc->Instance == ADC1) {
+    __HAL_RCC_ADC_CLK_DISABLE();
+    HAL_GPIO_DeInit(GPIO(BD_BATREAD));
+  }
+}
+
 void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi) {
   GPIO_InitTypeDef GPIO_InitStruct = {0};
   if (hspi->Instance == SPI2) {

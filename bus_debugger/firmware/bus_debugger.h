@@ -78,18 +78,20 @@ struct MenuEntry {
   union {
     struct {
       char *text;
-      bool owned_text;
       bool is_scrollable;
       uint16_t scroll_pos;
       void (*update_text)(char **);
+      uint8_t update_reload;
+      uint8_t update_timer;
     } label;
     struct {
       char *text;
-      void (*on_yes)(Menu *);
-      void (*on_no)(Menu *);
-      void (*on_left)(Menu *);
-      void (*on_right)(Menu *);
-      void (*on_menu)(Menu *);
+      void (*on_yes)(void *);
+      void (*on_no)(void *);
+      void (*on_left)(void *);
+      void (*on_right)(void *);
+      void (*on_menu)(void *);
+      void *argument;
     } pressable;
     struct {
       MenuEntry *choices;
@@ -148,7 +150,6 @@ struct Menu {
   Menu *prev_menu;
 };
 
-extern Menu *main_menu;
 extern Menu *cur_menu;
 /* Bus Debugger Class */
 typedef struct {
@@ -189,3 +190,6 @@ extern bool tick_too_slow;
 PapyrusStatus bus_debugger_init(BusDebugger *bus_dbg);
 PapyrusStatus bd_hardware_init(BusDebugger *bus_dbg);
 void Error_Handler();
+void allocation_failed();
+float get_bat_voltage();
+void reset_board(void *unused);
