@@ -1,609 +1,1092 @@
 # Papyrus Rocket Avionics Firmware
 
-## Project Overview
-Papyrus is a modular rocket avionics system designed for liquid propulsion and controls projects. The system consists of a Main Board coordinator and multiple specialized Controller Boards connected via CAN bus, with a Ground Station for remote monitoring and control.
+Real-time embedded firmware for multi-board rocket avionics system with CAN bus communication, FreeRTOS task management, and modular controller architecture.
 
 ## System Architecture
-```
-┌─────────────────┐    433/915MHz    ┌─────────────────┐
-│   Main Board    │◄─────────────────►│   Ground        │
-│   (STM32H7)     │                  │   Station       │
-│                 │                  │                 │
-│ - Central Logic │                  │ - Web Interface │
-│ - Radio Comms   │                  │ - Radio Handler │
-│ - Data Logging  │                  │ - Data Logger   │
-│ - Power Mgmt    │                  │ - Emergency Ctrl│
-└─────────┬───────┘                  └─────────────────┘
-         │ CAN Bus (500kbps)
-┌────────┼──────────────────┐
-│        │                  │
-┌────────▼────────┐┌────────▼────────┐┌────────▼────────┐
-│ Servo Controller││ TC Controller   ││ I/O Controller  │
-│ (STM32C092)     ││ (STM32C092)     ││ (STM32C092)     │
-│                 ││                 ││                 │
-│ - 3x Servos     ││ - 8x TCs        ││ - GPIO/ADC      │
-│ - Current Mon   ││ - SPI Interface ││ - General I/O   │
-│ - Position FB   ││ - CJC Comp      ││ - Analog Input  │
-└─────────────────┘└─────────────────┘└─────────────────┘
-         │
-┌────────▼────────┐
-│  Bus Debugger   │
-│  (STM32C092)    │
-│                 │
-│ - CAN Monitor   │
-│ - LCD Display   │
-│ - Portable      │
-└─────────────────┘
-```
-
-## Complete File Structure and Dependencies
 
 ```
-Papyrus-RT-Firmware/
-├── README.md                              # This file - Project overview and usage
-├── Makefile                               # Build system - compiles all components
-├── Papyrus Firmware - Rocket Team.pdf    # Original requirements document
-│
-├── common/                                # Shared libraries used by all boards
-│   ├── protocols/
-│   │   ├── papyrus_can.h                 # CAN protocol definitions (included by all)
-│   │   └── papyrus_can.c                 # CAN protocol implementation
-│   ├── config/
-│   │   └── papyrus_config.h              # System-wide configuration (included by all)
-│   ├── utils/
-│   │   └── papyrus_utils.h               # Utility functions and error handling
-│   └── drivers/                          # Hardware abstraction layer drivers
-│
-├── main_board/                           # Main coordinator board (STM32H7)
-│   ├── src/
-│   │   └── main.c                        # Main application with FreeRTOS tasks
+┌─────────────────┐    CAN Bus    ┌─────────────────┐
+│   Main Board    │◄─────────────►│ Controller      │
+│   (STM32H7)     │               │ Boards          │
+│                 │               │ (STM32C092)     │
+│ • FreeRTOS      │               │                 │
+│ • CAN Manager   │               │ • Servo Ctrl    │
+│ • Data Logger   │               │ • Thermocouple  │
+│ • Radio Handler │               │ • General I/O   │
+│ • Power Monitor │               │                 │
+└─────────────────┘               └─────────────────┘
+         │                                │
+         │ Radio                          │
+         ▼                                │
+┌─────────────────┐               ┌─────────────────┐
+│ Ground Station  │               │ Bus Debugger    │
+│ • Web Interface │               │ • CAN Monitor   │
+│ • Radio Rx      │               │ • LCD Display   │
+│ • Data Logging  │               │ • Standalone    │
+└─────────────────┘               └─────────────────┘
+```
+
+## Project Structure
+
+```
+firmware/
+├── common/                    # Shared libraries
+│   ├── protocols/            # CAN bus protocol
+│   │   ├── papyrus_can.h     # CAN ID structure, message types
+│   │   └── papyrus_can.c     # CAN message handling
+│   ├── config/               # System configuration
+│   │   └── papyrus_config.h  # Timing, priorities, limits
+│   └── utils/                # Common utilities
+│       └── papyrus_utils.h   # Status codes, error handling
+├── main_board/               # Main board firmware
 │   ├── inc/
-│   │   └── main_board.h                  # Main board structures and APIs  
-│   ├── config/                           # Board-specific configuration
-│   └── tests/                            # Unit tests for main board
-│
-├── controllers/                          # Controller board firmwares (STM32C092)
-│   ├── framework/
-│   │   └── controller_base.h             # Generic controller framework
-│   ├── servo_controller/
-│   │   └── servo_controller.h            # Servo control implementation
-│   ├── tc_controller/
-│   │   └── tc_controller.h               # Thermocouple measurement
-│   └── io_controller/                    # General purpose I/O controller
-│
-├── ground_station/                       # Ground station software
-│   ├── firmware/
-│   │   └── ground_station.h              # Ground station MCU firmware
-│   ├── web_interface/                    # Web-based control interface
-│   └── radio_handler/                    # Radio communication handler
-│
-├── bus_debugger/                         # CAN bus debugging tool
-│   ├── firmware/
-│   │   └── bus_debugger.h                # Bus debugger MCU code
-│   └── interface/                        # User interface code
-│
-├── tools/                                # Development and testing tools
-│   ├── testing/
-│   │   └── test_framework.py             # Comprehensive testing framework
-│   ├── simulation/                       # Hardware simulation tools
-│   └── utilities/                        # Build and deployment scripts
-│
-└── docs/                                 # Documentation and specifications
-    ├── IMPLEMENTATION_SUMMARY.md         # Detailed implementation guide
-    ├── protocols/                        # Communication protocol specs
-    ├── hardware/                         # Hardware interface documentation
-    └── testing/                          # Testing procedures and results
+│   │   └── main_board.h      # Main board interface
+│   └── src/
+│       └── main.c            # FreeRTOS task implementation
+├── controllers/              # Controller board firmware
+│   ├── framework/            # Generic controller framework
+│   │   ├── controller_base.h # Base controller structure
+│   │   └── controller_base.c # Common controller functions
+│   ├── servo_controller/     # Servo control implementation
+│   │   └── servo_controller.h # Servo-specific interface
+│   └── tc_controller/        # Thermocouple controller
+├── ground_station/           # Ground station software
+│   └── firmware/
+│       └── ground_station.h  # Ground station interface
+├── bus_debugger/             # CAN bus debugging tool
+│   └── firmware/             # Debugger firmware
+├── tools/                    # Development tools
+│   └── testing/              # Test frameworks
+├── drivers/                  # Hardware drivers
+├── linker/                   # Linker scripts
+├── docs/                     # Documentation
+├── Makefile                  # Build system
+└── README.md                 # This file
 ```
 
-## File Descriptions and Interactions
+## File Descriptions and Key Functions
 
-### Core System Files
+### Common Libraries (`common/`)
 
-#### `common/protocols/papyrus_can.h` & `papyrus_can.c`
-**Purpose**: Defines the CAN bus communication protocol used by all boards
-**Interactions**: 
-- Included by ALL board firmware files
-- Defines message structures, board IDs, and protocol functions
-- Used by main board to coordinate all controllers
-- Used by controllers to communicate with main board
+#### `common/protocols/papyrus_can.h`
+**Purpose**: Defines the Papyrus CAN bus communication protocol and message structures.
+
 **Key Functions**:
-- `can_build_id()` - Constructs CAN message IDs
-- `can_validate_message()` - Validates incoming messages
-- `can_calculate_crc8()` - Message integrity checking
+- **CAN ID Structure**: 11-bit identifier with priority (3 bits), source board ID (4 bits), message type (4 bits)
+- **Message Types**: Emergency, Error, Priority, Command, Notification, Response, Stream, Bulk Data
+- **Board IDs**: Main Board (0x0), Servo Controllers (0x1-0x3), Thermocouple (0x4), I/O (0x5), Ground Station (0x6), Bus Debugger (0x7)
+- **Error Codes**: Comprehensive error enumeration (CAN bus, hardware, memory, power, temperature, accuracy, overcurrent)
+- **Message Structures**: Standardized CAN message format with command IDs, arguments, and data blocks
+- **Transaction Management**: Multi-message transaction handling for complex operations
+
+**Critical Functions**:
+```c
+uint32_t can_build_id(can_priority_t priority, board_id_t source, msg_type_t msg_type);
+bool can_validate_message(const can_message_t* msg);
+uint8_t can_calculate_crc8(const uint8_t* data, uint8_t length);
+```
+
+#### `common/protocols/papyrus_can.c`
+**Purpose**: Implements CAN bus protocol functions and message handling.
+
+**Key Functions**:
+- **Message Construction**: Build CAN IDs from components, validate message integrity
+- **CRC Calculation**: 8-bit CRC for message integrity verification
+- **Board Identification**: Convert board IDs to names, identify controller types
+- **Debug Support**: Convert messages to human-readable strings for debugging
+- **Error Handling**: Validate message parameters and detect protocol violations
 
 #### `common/config/papyrus_config.h`
-**Purpose**: System-wide configuration parameters and timing definitions
-**Interactions**:
-- Included by ALL firmware files
-- Defines timing parameters, safety limits, hardware settings
-- Controls system behavior across all boards
-**Key Definitions**:
-- `SERVO_UPDATE_RATE_HZ` - Servo control loop frequency
-- `CAN_BAUDRATE` - CAN bus communication speed
-- `EMERGENCY_RESPONSE_TIME_MS` - Emergency stop timeout
+**Purpose**: Centralized system configuration with compile-time validation.
+
+**Key Configurations**:
+- **Timing**: System tick (1kHz), servo update (50Hz), sensor rate (100Hz), status rate (10Hz)
+- **Communication**: CAN baudrate (500kbps), radio frequency (433MHz), UART baudrates
+- **Hardware Limits**: Voltage rails (3.3V, 5V, 12V), temperature limits (-20°C to 85°C)
+- **Safety**: Watchdog timeout (5s), emergency stop hold (10s), safe mode timeout (30s)
+- **Memory**: Flash config (4KB), log storage (64KB), RAM buffers (1KB), CAN buffers (32 messages)
+- **Task Priorities**: Emergency (7), CAN (6), Control (5), Data (4), Status (2)
+
+**Validation Macros**:
+```c
+#if CAN_BUS_BAUDRATE < 125000 || CAN_BUS_BAUDRATE > 1000000
+    #error "CAN bus baudrate must be between 125k and 1M bps"
+#endif
+```
 
 #### `common/utils/papyrus_utils.h`
-**Purpose**: Common utility functions, error handling, and system management
-**Interactions**:
-- Included by all board firmware
-- Provides logging, error handling, memory management
-- Used for system health monitoring and diagnostics
-**Key Functions**:
-- `papyrus_emergency_stop()` - System-wide emergency stop
-- `papyrus_log_error()` - Error logging and reporting
-- `papyrus_get_timestamp_ms()` - System timing functions
+**Purpose**: Common utility functions and data structures for system-wide use.
 
-### Main Board Files
+**Key Components**:
+- **Status Codes**: Comprehensive error enumeration (OK, TIMEOUT, INVALID_PARAM, HARDWARE, etc.)
+- **System States**: INIT, RUNNING, SAFE_MODE, EMERGENCY_STOP, ERROR, SHUTDOWN
+- **Board Health**: Health monitoring structures with error tracking
+- **Error Logging**: Error entry structures with timestamps and escalation
+- **System Statistics**: Performance metrics, memory usage, communication statistics
+- **Debug Macros**: Conditional debug logging and assertion macros
 
-#### `main_board/src/main.c`
-**Purpose**: Central coordinator firmware with FreeRTOS task management
-**Interactions**:
-- Communicates with ALL controller boards via CAN
-- Handles radio communication with ground station
-- Manages system-wide emergency stops and safety
-- Logs data from all boards to SD card
-**Dependencies**: 
-- `papyrus_can.h` - CAN communication
-- `main_board.h` - Board-specific definitions
-- `papyrus_config.h` - System configuration
-**Key Tasks**:
-- `emergency_task()` - Highest priority safety task
-- `can_manager_task()` - CAN bus communication
-- `system_controller_task()` - Main coordination logic
-- `data_logger_task()` - Data logging to SD card
-- `radio_handler_task()` - Ground station communication
+**Utility Functions**:
+```c
+papyrus_status_t papyrus_init(void);
+uint32_t papyrus_get_timestamp(void);
+void papyrus_delay_ms(uint32_t ms);
+papyrus_status_t papyrus_emergency_stop(error_code_t error);
+```
+
+### Main Board (`main_board/`)
 
 #### `main_board/inc/main_board.h`
-**Purpose**: Main board data structures, configuration, and API definitions
-**Interactions**:
-- Included by `main.c` and other main board modules
-- Defines system status structures used by ground station
-- Provides API for board management and control
-**Key Structures**:
-- `main_board_config_t` - Board configuration
-- `main_board_status_t` - Real-time system status
-- `system_event_t` - System event logging
+**Purpose**: Main board interface definitions and FreeRTOS task management.
 
-### Controller Framework
+**Key Structures**:
+- **Configuration**: System ID, CAN/radio settings, power management, safety parameters, logging config
+- **Status**: System state, power status, communication statistics, controller health, error tracking
+- **Events**: System event structures for logging and notification
+- **Data Logging**: Telemetry and command logging structures
+
+**Core Functions**:
+```c
+papyrus_status_t main_board_init(void);
+papyrus_status_t main_board_send_command(board_id_t target, system_command_t cmd, const uint8_t* data);
+papyrus_status_t main_board_request_status(board_id_t target);
+papyrus_status_t emergency_stop_procedure(error_code_t error_code);
+QueueHandle_t main_board_get_can_tx_queue(void);
+```
+
+**FreeRTOS Integration**:
+- **Task Queues**: CAN TX, system events, data logging queues
+- **Task Management**: Emergency handler, CAN manager, system controller, data logger, radio handler, power monitor, status reporter
+- **Priority Management**: Real-time task scheduling with defined priorities and periods
+
+#### `main_board/src/main.c`
+**Purpose**: FreeRTOS task implementation and system coordination.
+
+**Key Tasks**:
+- **Emergency Handler** (Priority 7, 1ms): Processes emergency stops and critical errors
+- **CAN Manager** (Priority 6, 10ms): Handles CAN bus communication and message routing
+- **System Controller** (Priority 5, 50ms): Coordinates system operations and controller management
+- **Data Logger** (Priority 4, 100ms): Logs telemetry and system events to SD card
+- **Radio Handler** (Priority 4, 20ms): Manages radio communication with ground station
+- **Power Monitor** (Priority 3, 500ms): Monitors power rails and battery status
+- **Status Reporter** (Priority 2, 1000ms): Reports system status and health metrics
+
+#### `main_board/src/main_board.c`
+**Purpose**: Main board firmware implementation with FreeRTOS task management.
+
+**Key Functions**:
+- **System Initialization**: Hardware setup, FreeRTOS initialization, task creation
+- **Task Management**: Emergency handler, CAN manager, system controller, data logger, radio handler, power monitor, status reporter
+- **Interrupt Handling**: CAN, UART, timer, and external interrupt handlers
+- **System Coordination**: Board communication, status monitoring, error handling
+- **Data Management**: SD card logging, telemetry processing, configuration management
+
+**Core Implementation**:
+```c
+// Main board initialization
+papyrus_status_t main_board_init(void);
+
+// Task creation and management
+void create_system_tasks(void);
+
+// Interrupt service routines
+void CAN1_RX0_IRQHandler(void);
+void USART1_IRQHandler(void);
+void TIM2_IRQHandler(void);
+```
+
+### Controller Framework (`controllers/`)
 
 #### `controllers/framework/controller_base.h`
-**Purpose**: Generic framework for all controller boards (object-oriented design in C)
-**Interactions**:
-- Base class included by ALL controller implementations
-- Provides common CAN handling, configuration, safety mechanisms
-- Extended by specific controller types (servo, TC, I/O)
-**Key Features**:
-- Virtual function pointers for controller-specific behavior
-- Common CAN message processing
-- Standardized error handling and safety modes
-- Hot-swap support for field replacement
+**Purpose**: Generic framework for all controller boards with polymorphic design.
 
-### Specific Controllers
+**Key Structures**:
+- **Controller Types**: SERVO, THERMOCOUPLE, UNKNOWN
+- **Controller States**: INIT, NOT_CONFIG, OKAY, FATAL, DISABLED, DANGER
+- **Board Status**: State tracking, statistics, subdevice states, error queues
+- **Base Controller**: Configuration, CAN communication, UART debug, GPIO indicators
+
+**Core Functions**:
+```c
+PapyrusStatus controller_base_init(ControllerBase *controller);
+PapyrusStatus controller_hardware_init(ControllerBase *controller);
+void papyrus_process_can_command(ControllerBase *base, ErrorEntry *err);
+```
+
+**Design Patterns**:
+- **Polymorphic Interface**: Function pointers for derived class implementations
+- **Error Management**: Comprehensive error tracking and escalation
+- **State Machine**: Clear state transitions with validation
+- **Hardware Abstraction**: Standardized hardware interface functions
+
+#### `controllers/framework/controller_base.c`
+**Purpose**: Implements common controller functionality and hardware abstraction.
+
+**Key Functions**:
+- **Initialization**: Hardware setup, configuration loading, CAN initialization
+- **Command Processing**: CAN message parsing and routing to appropriate handlers
+- **State Management**: State transitions with validation and error handling
+- **Error Handling**: Error logging, escalation, and recovery procedures
+- **Hardware Interface**: Standardized GPIO, UART, and CAN operations
 
 #### `controllers/servo_controller/servo_controller.h`
-**Purpose**: Servo motor control with PWM generation and current monitoring
-**Interactions**:
-- Extends `controller_base.h` framework
-- Receives position commands from main board via CAN
-- Reports status and current consumption back to main board
-- Can be controlled remotely via ground station
-**Key Functions**:
-- `servo_set_position()` - Set target position
-- `servo_read_current()` - Monitor current consumption
-- `servo_update_control_loop()` - 50Hz control loop
-- `servo_emergency_stop()` - Safety shutdown
+**Purpose**: Servo control implementation with position feedback and current monitoring.
+
+**Key Structures**:
+- **Configuration**: PWM settings, position limits, current monitoring, movement parameters, safety limits, calibration data, feedback config
+- **Status**: Current positions, target positions, movement status, error tracking, performance metrics
+- **Commands**: SET_POSITION, SET_SPEED, ENABLE, DISABLE, STOP, HOME, CALIBRATE, SET_LIMITS, GET_POSITION, GET_STATUS
+
+**Core Functions**:
+```c
+papyrus_status_t servo_set_position(servo_controller_t* servo_ctrl, uint8_t servo_id, uint16_t position, uint8_t speed);
+papyrus_status_t servo_enable(servo_controller_t* servo_ctrl, uint8_t servo_id);
+papyrus_status_t servo_emergency_stop(servo_controller_t* servo_ctrl);
+papyrus_status_t servo_calibrate(servo_controller_t* servo_ctrl, uint8_t servo_id);
+```
+
+**Advanced Features**:
+- **Trajectory Planning**: Smooth position transitions with acceleration/deceleration
+- **Current Monitoring**: Stall detection and overcurrent protection
+- **Position Feedback**: Potentiometer or encoder position sensing
+- **Safety Limits**: Position and current limits with emergency stop capability
+- **Calibration**: Automatic calibration and limit detection
 
 #### `controllers/tc_controller/tc_controller.h`
-**Purpose**: Thermocouple temperature measurement with cold junction compensation
-**Interactions**:
-- Extends `controller_base.h` framework
-- Reads multiple thermocouple channels via SPI
-- Reports temperature data to main board via CAN
-- Provides temperature alarms and safety monitoring
-**Key Functions**:
-- `tc_read_temperature()` - Read specific thermocouple
-- `tc_read_all_temperatures()` - Bulk temperature reading
-- `tc_set_alarm_limits()` - Configure temperature alarms
-- `tc_compensate_cjc()` - Cold junction compensation
+**Purpose**: Thermocouple controller interface for temperature measurement and monitoring.
 
-### Ground Station
+**Key Structures**:
+- **Configuration**: Thermocouple type, cold junction compensation, temperature limits, sampling rate
+- **Status**: Current temperatures, cold junction temperature, error status, calibration data
+- **Commands**: READ_TEMPERATURE, SET_LIMITS, CALIBRATE, GET_STATUS, CONFIGURE
+
+**Core Functions**:
+```c
+papyrus_status_t tc_controller_init(tc_controller_t* tc_ctrl, board_id_t board_id);
+papyrus_status_t tc_read_temperature(tc_controller_t* tc_ctrl, uint8_t channel, float* temperature);
+papyrus_status_t tc_set_limits(tc_controller_t* tc_ctrl, uint8_t channel, float min_temp, float max_temp);
+papyrus_status_t tc_calibrate(tc_controller_t* tc_ctrl, uint8_t channel);
+```
+
+**Features**:
+- **Multi-Channel Support**: Up to 4 thermocouple channels
+- **Cold Junction Compensation**: Automatic cold junction temperature compensation
+- **Temperature Limits**: Configurable high/low temperature alarms
+- **Calibration**: Offset and scaling calibration for accuracy
+- **Error Detection**: Open circuit, short circuit, and accuracy error detection
+
+#### `controllers/tc_controller/tc_controller.c`
+**Purpose**: Thermocouple controller implementation with SPI communication and temperature processing.
+
+**Key Functions**:
+- **Hardware Initialization**: SPI setup, GPIO configuration, interrupt setup
+- **Temperature Reading**: SPI communication with MAX31855 amplifiers
+- **Cold Junction Compensation**: Automatic compensation using onboard temperature sensor
+- **Error Handling**: Detection and reporting of thermocouple faults
+- **Data Processing**: Raw ADC to temperature conversion with calibration
+
+#### `controllers/tc_controller/hardware_setup.c`
+**Purpose**: Hardware-specific initialization and configuration for thermocouple controller.
+
+**Key Functions**:
+- **SPI Configuration**: Setup SPI interface for MAX31855 communication
+- **GPIO Setup**: Configure thermocouple enable pins and status LEDs
+- **Interrupt Configuration**: Setup interrupt handlers for temperature alarms
+- **Power Management**: Control thermocouple amplifier power supplies
+- **Hardware Validation**: Self-test of thermocouple circuits and amplifiers
+
+#### `controllers/tc_controller/commands_tc1.h`
+**Purpose**: CAN command definitions for thermocouple controller operations.
+
+**Key Commands**:
+- **TC_CMD_READ_TEMP**: Read temperature from specified channel
+- **TC_CMD_SET_LIMITS**: Set temperature limits for alarm monitoring
+- **TC_CMD_CALIBRATE**: Calibrate temperature offset and scaling
+- **TC_CMD_GET_STATUS**: Get controller status and error information
+- **TC_CMD_CONFIGURE**: Configure thermocouple type and parameters
+
+#### `controllers/tc_controller/commands_tc1.c`
+**Purpose**: Implementation of thermocouple CAN command handlers.
+
+**Key Functions**:
+- **Command Parsing**: Parse incoming CAN commands and extract parameters
+- **Response Generation**: Generate appropriate CAN responses with data
+- **Error Handling**: Validate commands and report errors via CAN
+- **Data Formatting**: Format temperature data for CAN transmission
+- **Status Reporting**: Report controller status and health information
+
+#### `controllers/tc_controller/uart_debugger.c`
+**Purpose**: UART debug interface for thermocouple controller development and testing.
+
+**Key Functions**:
+- **Debug Output**: Human-readable temperature and status information
+- **Command Interface**: UART-based command interface for testing
+- **Data Logging**: Real-time temperature data logging via UART
+- **Error Reporting**: Detailed error information for debugging
+- **Calibration Interface**: Interactive calibration via UART commands
+
+#### `controllers/devices/tc_amplifier_max31855.h`
+**Purpose**: Hardware abstraction layer for MAX31855 thermocouple amplifier.
+
+**Key Functions**:
+- **SPI Communication**: Low-level SPI interface for MAX31855
+- **Data Conversion**: Convert raw SPI data to temperature values
+- **Error Detection**: Detect open circuit, short circuit, and accuracy errors
+- **Cold Junction**: Read cold junction temperature from onboard sensor
+- **Configuration**: Configure amplifier settings and parameters
+
+#### `controllers/devices/tc_amplifier_max31855.c`
+**Purpose**: Implementation of MAX31855 thermocouple amplifier driver.
+
+**Key Functions**:
+- **SPI Transactions**: Handle SPI read/write operations to MAX31855
+- **Temperature Calculation**: Convert thermocouple voltage to temperature
+- **Error Processing**: Process and report amplifier error conditions
+- **Data Validation**: Validate temperature readings and error flags
+- **Hardware Interface**: Direct hardware control for amplifier operation
+
+### Controller Target Files (`controllers/target/`)
+
+#### `controllers/target/papyrus_hardware.h`
+**Purpose**: Hardware abstraction layer interface for controller boards.
+
+**Key Functions**:
+- **GPIO Interface**: Pin configuration, digital I/O, interrupt setup
+- **SPI Interface**: SPI communication for sensors and peripherals
+- **UART Interface**: Serial communication for debugging and configuration
+- **Timer Interface**: PWM generation and timer management
+- **ADC Interface**: Analog-to-digital conversion for sensors
+- **CAN Interface**: CAN bus communication and message handling
+
+#### `controllers/target/papyrus_hardware.c`
+**Purpose**: Hardware abstraction layer implementation for controller boards.
+
+**Key Functions**:
+- **Hardware Initialization**: GPIO, SPI, UART, timer, ADC, CAN setup
+- **Peripheral Management**: Configure and manage all hardware peripherals
+- **Interrupt Handling**: Setup and manage interrupt service routines
+- **Error Handling**: Hardware error detection and reporting
+- **Power Management**: Peripheral power control and monitoring
+
+#### `controllers/target/commands_sys0.h`
+**Purpose**: System command definitions for controller boards.
+
+**Key Commands**:
+- **SYS_CMD_RESET**: System reset command
+- **SYS_CMD_GET_STATUS**: Get system status
+- **SYS_CMD_SET_CONFIG**: Set system configuration
+- **SYS_CMD_EMERGENCY_STOP**: Emergency stop command
+- **SYS_CMD_SAFE_MODE**: Enter/exit safe mode
+- **SYS_CMD_SELF_TEST**: Run self-test procedures
+
+#### `controllers/target/commands_sys0.c`
+**Purpose**: System command handler implementation for controller boards.
+
+**Key Functions**:
+- **Command Processing**: Parse and execute system commands
+- **Response Generation**: Generate appropriate command responses
+- **Error Handling**: Validate commands and report errors
+- **Status Reporting**: Report system status and health information
+- **Configuration Management**: Handle configuration updates
+
+#### `controllers/target/startup.s`
+**Purpose**: Assembly startup code for STM32C092FCP6 microcontroller.
+
+**Key Functions**:
+- **Vector Table**: Interrupt vector table initialization
+- **Stack Setup**: Stack pointer initialization
+- **Memory Initialization**: BSS and data section initialization
+- **Clock Configuration**: System clock setup
+- **Main Entry**: Jump to main application entry point
+
+### Ground Station (`ground_station/`)
 
 #### `ground_station/firmware/ground_station.h`
-**Purpose**: Ground station firmware for remote monitoring and control
-**Interactions**:
-- Communicates with main board via 433/915MHz radio
-- Provides web interface for multiple users
-- Logs all telemetry data for analysis
-- Can send emergency stop commands
-**Key Functions**:
-- `gs_radio_send()` - Send commands to rocket
-- `gs_web_broadcast()` - Send data to web clients
-- `gs_emergency_stop()` - Remote emergency stop
-- `gs_log_telemetry()` - Data logging and archival
+**Purpose**: Ground station firmware for radio communication and web interface management.
 
-### Bus Debugger
+**Key Structures**:
+- **Configuration**: Radio settings, network config, logging parameters, emergency controls
+- **Status**: System state, radio status, network status, main board communication, logging status, emergency status
+- **Telemetry**: Data packet structures for real-time monitoring
+- **Commands**: Command packet structures for system control
+- **Web Clients**: Client management for multi-user web interface
+
+**Core Functions**:
+```c
+papyrus_status_t ground_station_init(void);
+papyrus_status_t gs_radio_send(const uint8_t* data, uint16_t length);
+papyrus_status_t gs_web_broadcast(const uint8_t* data, uint16_t length);
+papyrus_status_t gs_emergency_stop(const char* reason);
+papyrus_status_t gs_cmd_servo_position(board_id_t board_id, uint8_t servo_id, uint16_t position, uint8_t speed);
+```
+
+**Key Features**:
+- **Radio Communication**: 433MHz/915MHz radio link with signal strength monitoring
+- **Web Interface**: Real-time status display and control via web browser
+- **Multi-Client Support**: Multiple web clients with operator mode control
+- **Data Logging**: Telemetry and command logging to local storage
+- **Emergency Controls**: Emergency stop and safe mode controls
+- **Command Routing**: System command routing to appropriate boards
+
+### Bus Debugger (`bus_debugger/`)
 
 #### `bus_debugger/firmware/bus_debugger.h`
-**Purpose**: Portable CAN bus monitoring and debugging tool
-**Interactions**:
-- Passively monitors CAN bus traffic
-- Does not interfere with normal system operation
-- Provides real-time analysis of message flow
-- Portable device for field troubleshooting
-**Key Functions**:
-- `bd_can_process_message()` - Monitor CAN messages
-- `bd_display_live_monitor()` - Real-time message display
-- `bd_log_message()` - Message logging for analysis
-- `bd_stats_update()` - Bus utilization statistics
+**Purpose**: Bus debugger firmware for CAN bus monitoring and debugging.
 
-### Build and Test Files
+**Key Structures**:
+- **Configuration**: CAN settings, display config, power management, logging parameters
+- **Status**: System state, CAN traffic status, display status, power status, error tracking
+- **CAN Monitoring**: Traffic analysis, message filtering, error detection
+- **Display Interface**: LCD display management and user interface
+- **Message Injection**: Test message generation and injection
 
-#### `Makefile`
-**Purpose**: Comprehensive build system for all firmware components
-**Interactions**:
-- Compiles common libraries first (dependencies for all)
-- Builds each board firmware with appropriate toolchain
-- Links with common libraries and board-specific code
-- Provides flash, debug, and test targets
-**Key Targets**:
-- `make all` - Build all firmware components
-- `make flash_main_board` - Flash main board firmware
-- `make test` - Run comprehensive test suite
-- `make clean` - Clean all build artifacts
+**Core Functions**:
+```c
+papyrus_status_t bus_debugger_init(void);
+papyrus_status_t bd_monitor_can_traffic(void);
+papyrus_status_t bd_inject_test_message(const can_message_t* msg);
+papyrus_status_t bd_update_display(void);
+papyrus_status_t bd_log_can_message(const can_message_t* msg);
+```
+
+**Key Features**:
+- **CAN Monitoring**: Passive CAN bus traffic analysis and logging
+- **Message Injection**: Test message injection for system testing
+- **Error Detection**: CAN bus error monitoring and reporting
+- **LCD Display**: Real-time status display and user interface
+- **Standalone Operation**: Independent power and processing capability
+- **Data Logging**: CAN traffic logging for analysis and debugging
+
+### Build System (`Makefile`)
+
+**Purpose**: Comprehensive build system for all firmware components.
+
+**Key Features**:
+- **Multi-Target Support**: Main board, controller boards, ground station, bus debugger
+- **Toolchain Integration**: ARM GCC, STM32CubeProgrammer, OpenOCD
+- **Build Types**: Debug and Release configurations
+- **Flash Targets**: Individual board flashing with verification
+- **Debug Support**: GDB integration for development debugging
+- **Testing**: Unit, integration, and hardware-in-loop testing
+- **Documentation**: Doxygen documentation generation
+- **Analysis**: Static analysis, memory usage, performance profiling
+
+**Build Commands**:
+```bash
+make all                    # Build all targets
+make main_board            # Build main board firmware
+make servo_controller      # Build servo controller
+make flash_main_board      # Flash main board
+make debug_main_board      # Start debug session
+make test_unit             # Run unit tests
+make clean                 # Clean build artifacts
+```
+
+### Development Tools (`tools/`)
 
 #### `tools/testing/test_framework.py`
-**Purpose**: Comprehensive testing framework for system validation
-**Interactions**:
-- Communicates with all boards via serial/USB connections
-- Sends test commands and validates responses
-- Tests inter-board communication via CAN bus
-- Validates emergency stop propagation
-**Key Functions**:
-- `run_all_tests()` - Execute complete test suite
-- `test_can_bus_communication()` - Validate CAN messaging
-- `test_emergency_stop_propagation()` - Safety system tests
-- `test_servo_position_control()` - Actuator validation
+**Purpose**: Comprehensive testing framework for firmware validation and verification.
 
-## Step-by-Step Usage Procedures
+**Key Features**:
+- **Unit Testing**: Automated unit tests for individual functions and modules
+- **Integration Testing**: System-level integration tests for board communication
+- **Hardware-in-Loop**: Real hardware testing with simulated inputs
+- **Performance Testing**: Timing and memory usage analysis
+- **Regression Testing**: Automated regression test suites
+- **Test Reporting**: Detailed test results and coverage reports
 
-### 1. Initial System Setup and Build
+**Test Categories**:
+- **CAN Protocol Tests**: Message construction, validation, error handling
+- **Controller Tests**: Servo control, thermocouple reading, safety features
+- **Main Board Tests**: FreeRTOS task scheduling, system coordination
+- **Ground Station Tests**: Radio communication, web interface, data logging
+- **Hardware Tests**: GPIO, SPI, I2C, PWM, ADC functionality
 
+**Usage**:
 ```bash
-# Step 1: Install development tools
-sudo apt-get install gcc-arm-none-eabi make doxygen python3
+# Run all tests
+python tools/testing/test_framework.py --all
 
-# Step 2: Clone/setup project
-cd Papyrus-RT-Firmware/
+# Run specific test category
+python tools/testing/test_framework.py --category can
 
-# Step 3: Build common libraries first (required by all boards)
-make -C common/
+# Run with hardware
+python tools/testing/test_framework.py --hardware
 
-# Step 4: Build all firmware components
-make all
-
-# This builds in order:
-# 1. Common libraries (papyrus_can.c, utilities)
-# 2. Main board firmware (depends on common)
-# 3. Controller firmwares (depend on common + framework)
-# 4. Ground station firmware (depends on common)
-# 5. Bus debugger firmware (depends on common)
+# Generate coverage report
+python tools/testing/test_framework.py --coverage
 ```
 
-### 2. Firmware Deployment Procedure
+### Hardware Drivers (`drivers/`)
+
+#### `drivers/stm32c0xx/`
+**Purpose**: STM32C0xx family hardware abstraction layer and peripheral drivers.
+
+**Key Components**:
+- **HAL Drivers**: Hardware abstraction layer for STM32C092FCP6
+- **Peripheral Drivers**: CAN, SPI, I2C, UART, PWM, ADC drivers
+- **Clock Configuration**: System clock setup and peripheral clock management
+- **Interrupt Handlers**: Interrupt service routines for all peripherals
+- **GPIO Management**: Pin configuration and GPIO control functions
+
+**Key Driver Files**:
+- **`stm32c0xx_hal_fdcan.h/.c`**: CAN bus driver for SN65HVD232QDRG4Q1 transceiver
+- **`stm32c0xx_hal_spi.h/.c`**: SPI driver for sensor communication (MAX31855, etc.)
+- **`stm32c0xx_hal_tim.h/.c`**: Timer/PWM driver for servo control and timing
+- **`stm32c0xx_hal_uart.h/.c`**: UART driver for debugging and configuration
+- **`stm32c0xx_hal_gpio.h/.c`**: GPIO driver for digital I/O and interrupt handling
+- **`stm32c0xx_hal_adc.h/.c`**: ADC driver for analog sensor reading
+- **`stm32c0xx_hal_rcc.h/.c`**: Clock configuration and peripheral clock management
+- **`stm32c0xx_hal_dma.h/.c`**: DMA driver for efficient data transfer
+- **`stm32c0xx_hal_flash.h/.c`**: Flash memory driver for configuration storage
+- **`stm32c0xx_hal_pwr.h/.c`**: Power management and low-power modes
+
+#### `drivers/common/`
+**Purpose**: Common hardware drivers shared across all boards.
+
+**Key Components**:
+- **CMSIS Core**: ARM Cortex-M core support files
+- **CMSIS Compiler**: Compiler-specific definitions and macros
+- **TrustZone**: Security and memory protection support
+- **MPU**: Memory Protection Unit support for safety-critical applications
+- **Cache**: Cache management for performance optimization
+
+### Linker Scripts (`linker/`)
+
+#### `linker/stm32c092xx_flash.ld`
+**Purpose**: Linker script for STM32C092FCP6 flash memory layout and section placement.
+
+**Key Sections**:
+- **Memory Layout**: Flash and RAM memory region definitions
+- **Section Placement**: Code, data, and stack section placement
+- **Vector Table**: Interrupt vector table placement and configuration
+- **Stack Configuration**: Stack size and placement for FreeRTOS
+- **Heap Configuration**: Dynamic memory allocation for FreeRTOS heap
+
+**Memory Map**:
+```
+Flash Memory (256KB):
+- 0x08000000: Vector table and startup code
+- 0x08001000: Application code
+- 0x08020000: Configuration data
+- 0x08030000: Bootloader (if present)
+
+RAM Memory (32KB):
+- 0x20000000: Stack and heap
+- 0x20001000: Global variables
+- 0x20002000: FreeRTOS task stacks
+```
+
+### Documentation (`docs/`)
+
+#### `docs/IMPLEMENTATION_SUMMARY.md`
+**Purpose**: Comprehensive implementation summary and technical reference document.
+
+**Key Sections**:
+- **System Architecture**: Detailed system design and component interactions
+- **Implementation Phases**: Complete 8-phase implementation breakdown
+- **Technical Specifications**: Detailed technical requirements and constraints
+- **Integration Guide**: Step-by-step integration procedures
+- **Testing Procedures**: Comprehensive testing methodology and procedures
+- **Performance Analysis**: System performance characteristics and benchmarks
+- **Maintenance Guide**: Long-term maintenance and support procedures
+
+**Usage**:
+- **Development Reference**: Technical details for firmware development
+- **Integration Guide**: Step-by-step system integration procedures
+- **Troubleshooting**: Comprehensive troubleshooting and debugging guide
+- **Maintenance**: Long-term maintenance and support procedures
+
+## Hardware Requirements
+
+### Main Board (STM32H7)
+- **MCU**: STM32H7 series (high-performance)
+- **Memory**: 1MB Flash, 1MB RAM
+- **Interfaces**: CAN, I2C, SPI, UART, USB-C
+- **Storage**: SD card, external flash
+- **Power**: 12V LiPo, USB power switching
+- **Radio**: 433MHz/915MHz module
+
+### Controller Boards (STM32C092FCP6)
+- **MCU**: STM32C092FCP6
+- **Memory**: 256KB Flash, 32KB RAM
+- **Interfaces**: CAN, I2C, SPI, PWM
+- **Power**: 3.3V from main board
+- **Connectors**: JST-XH for CAN bus
+
+### Programming Hardware
+- **ST-Link V3** or **ST-Link V2** programmer
+- **Tag-Connect 6-pin** cables
+- **USB-C** cable for ground station
+
+## Build System
+
+### Prerequisites
 
 ```bash
-# Step 1: Flash main board first (system coordinator)
+# Install ARM toolchain
+sudo apt-get install gcc-arm-none-eabi gdb-arm-none-eabi
+
+# Install STM32CubeProgrammer
+# Download from: https://www.st.com/en/development-tools/stm32cubeprog.html
+
+# Install Python dependencies
+pip install pytest pytest-cov
+```
+
+### Build Commands
+
+```bash
+# Build all targets
+make all
+
+# Build specific components
+make main_board          # Main board firmware
+make servo_controller    # Servo controller
+make tc_controller       # Thermocouple controller
+make ground_station      # Ground station
+make bus_debugger        # Bus debugger
+
+# Clean build artifacts
+make clean
+```
+
+### Flash Commands
+
+```bash
+# Flash main board (requires ST-Link)
 make flash_main_board
-# Powers up, initializes CAN bus, waits for controllers
 
-# Step 2: Flash controller boards (any order)
-make flash_servo        # Servo controller
-make flash_tc          # Thermocouple controller  
-make flash_io          # I/O controller
-# Each controller auto-registers with main board via CAN
+# Flash controller boards
+make flash_servo
+make flash_tc
+make flash_io
 
-# Step 3: Flash ground station (optional for local operation)
+# Flash ground station
 make flash_gs
 
-# Step 4: Flash bus debugger (optional for debugging)
+# Flash bus debugger
 make flash_debugger
-
-# Step 5: Verify system startup
-python3 tools/testing/test_framework.py --categories unit
 ```
 
-### 3. System Operation Workflow
+## CAN Bus Protocol
 
-#### A. Normal Startup Sequence
-```bash
-# 1. Power up main board
-# main_board/src/main.c executes:
-#   - HAL initialization
-#   - FreeRTOS task creation
-#   - CAN bus initialization
-#   - Emergency handler activation
-
-# 2. Controller boards boot and register
-# Each controller (servo_controller.h, tc_controller.h) executes:
-#   - controller_base_init() 
-#   - CAN communication setup
-#   - Send identification message to main board
-#   - Enter normal operation mode
-
-# 3. Ground station connection (optional)
-# ground_station.h executes:
-#   - Radio initialization
-#   - Web server startup
-#   - Connection to main board via radio
-
-# 4. System ready for operation
-# All boards in SYSTEM_STATE_NORMAL
-# CAN bus active with heartbeat messages
-# Ready to accept commands
+### Message ID Structure (11-bit)
+```
+Bits [10-8]: Priority (3 bits)
+Bits [7-4]:  Source Board ID (4 bits)  
+Bits [3-0]:  Message Type (4 bits)
 ```
 
-#### B. Servo Control Operation
-```bash
-# Option 1: Direct CAN command (from main board)
-# main_board/src/main.c:
-send_board_command(BOARD_ID_SERVO_1, SERVO_CMD_SET_POSITION, position_data, length);
+### Board IDs
+- `0x0`: Main Board
+- `0x1`: Servo Controller 1
+- `0x2`: Servo Controller 2
+- `0x3`: Servo Controller 3
+- `0x4`: Thermocouple Controller
+- `0x5`: General I/O Controller
+- `0x6`: Ground Station
+- `0x7`: Bus Debugger
 
-# Option 2: Ground station web interface
-# User clicks servo control in web interface
-# ground_station.h:
-gs_cmd_servo_position(BOARD_ID_SERVO_1, servo_id, position, speed);
-# -> Radio transmission to main board
-# -> CAN message to servo controller
-# -> servo_controller.h processes command
-# -> PWM output updated, current monitored
-# -> Status reported back via CAN
-```
+### Message Types
+- `0x0`: System Command
+- `0x1`: Status Report
+- `0x2`: Servo Command
+- `0x3`: Thermocouple Data
+- `0x4`: Emergency Stop
+- `0x5`: Configuration
+- `0x6`: Data Log
+- `0x7`: Error Report
 
-#### C. Temperature Monitoring
-```bash
-# Automatic operation (continuous monitoring)
-# tc_controller.h executes every 10Hz:
-tc_read_all_temperatures(&tc_ctrl);
-# -> SPI communication with TC amplifiers  
-# -> Cold junction compensation applied
-# -> Temperature validation and filtering
-# -> Alarm checking
-# -> CAN message sent to main board with data
+### Priority Levels
+- `0x0`: Emergency (highest)
+- `0x1`: Critical
+- `0x2`: High
+- `0x3`: Normal
+- `0x4`: Low
+- `0x5`: Background
+- `0x6`: Debug
+- `0x7`: Maintenance (lowest)
 
-# main_board/src/main.c receives temperature data:
-# -> Logs to SD card via data_logger_task()
-# -> Forwards to ground station via radio_handler_task()
-# -> Displayed in real-time on web interface
-```
+## Main Board Firmware
 
-#### D. Emergency Stop Procedure
-```bash
-# Trigger sources (any of):
-# 1. Ground station emergency button
-gs_emergency_stop("User initiated");
+### FreeRTOS Tasks
 
-# 2. Main board safety monitor detects fault
-papyrus_emergency_stop(ERROR_TEMPERATURE);
+| Task | Priority | Period (ms) | Stack (words) | Function |
+|------|----------|-------------|---------------|----------|
+| Emergency Handler | 7 | 1 | 512 | Emergency stop processing |
+| CAN Manager | 6 | 10 | 1024 | CAN bus communication |
+| System Controller | 5 | 50 | 2048 | System coordination |
+| Data Logger | 4 | 100 | 1024 | SD card logging |
+| Radio Handler | 4 | 20 | 1024 | Radio communication |
+| Power Monitor | 3 | 500 | 512 | Power management |
+| Status Reporter | 2 | 1000 | 512 | Status reporting |
 
-# 3. Controller board detects local fault  
-controller_base_report_error(&controller, ERROR_OVERCURRENT, servo_id);
+### Key Functions
 
-# Emergency propagation (< 1ms):
-# 1. main_board emergency_task() activated (highest priority)
-# 2. CAN broadcast: SYS_CMD_EMERGENCY_STOP to all boards
-# 3. All controllers receive and execute emergency_stop():
-#    - Disable all actuators (servos, outputs)
-#    - Enter CONTROLLER_STATE_EMERGENCY_STOP
-#    - Send acknowledgment back to main board
-# 4. Ground station notified via radio
-# 5. Emergency state maintained until manually cleared
-```
-
-### 4. Testing and Validation Procedures
-
-#### A. Unit Testing (Individual Board Validation)
-```bash
-# Test individual board functionality
-python3 tools/testing/test_framework.py --categories unit
-
-# This executes:
-# 1. Connect to each board via serial/USB
-# 2. Send test commands and validate responses:
-#    - test_main_board_startup() -> "STATUS" -> "MAIN_BOARD_READY"
-#    - test_servo_position_control() -> Set positions -> Verify movement
-#    - test_tc_temperature_reading() -> Read temps -> Validate range
-# 3. Generate test report with pass/fail status
-```
-
-#### B. Integration Testing (Multi-Board Communication)
-```bash
-# Test inter-board communication and coordination
-python3 tools/testing/test_framework.py --categories integration
-
-# This executes:
-# 1. test_can_bus_communication():
-#    - Send test message from main board
-#    - Verify reception by controller boards
-#    - Validate message integrity and timing
-# 2. test_emergency_stop_propagation():
-#    - Trigger emergency from main board
-#    - Verify all controllers enter emergency state
-#    - Test emergency clear procedure
-# 3. test_ground_station_communication():
-#    - Send commands via ground station web interface
-#    - Verify execution on target boards
-#    - Validate telemetry feedback
-```
-
-#### C. Hardware-in-the-Loop Testing
-```bash
-# Test with actual hardware connected
-python3 tools/testing/test_framework.py --categories hardware
-
-# This executes:
-# 1. Servo movement tests with position feedback
-# 2. Temperature measurement with reference sensors
-# 3. Current monitoring with known loads
-# 4. Radio communication range testing
-# 5. Emergency stop timing validation (< 1ms requirement)
-```
-
-### 5. Debugging and Troubleshooting
-
-#### A. Using the Bus Debugger
-```bash
-# 1. Connect bus debugger to CAN bus (passive monitoring)
-# 2. Power on debugger (battery or USB powered)
-# 3. Navigate LCD menu:
-#    - "Live Monitor" -> Real-time CAN messages
-#    - "Statistics" -> Bus utilization and error rates
-#    - "Message Log" -> Historical message capture
-#    - "Triggers" -> Capture specific message patterns
-
-# 4. Analyze problems:
-#    - Missing heartbeats -> Board communication failure
-#    - High error rates -> CAN bus wiring issues  
-#    - Unexpected messages -> Firmware bugs
-#    - Bus overload -> Too many messages (reduce rates)
-```
-
-#### B. Serial Debug Output
-```bash
-# Connect to any board via serial/USB (115200 baud)
-# Each board outputs debug information:
-
-# Main board debug output:
-# [INFO] Main board started, CAN bus active
-# [DEBUG] Controller SERVO_1 connected, healthy
-# [WARN] Controller TC_2 communication timeout
-# [ERROR] Emergency stop triggered: OVERCURRENT
-
-# Controller debug output:
-# [INFO] Servo controller ready, 3 servos enabled
-# [DEBUG] Position command received: servo=0, pos=2048
-# [WARN] Servo 1 current high: 1800mA
-# [ERROR] Servo 2 stall detected
-```
-
-#### C. Web Interface Monitoring
-```bash
-# 1. Connect to ground station web interface: http://192.168.1.100:8080
-# 2. Real-time system monitoring:
-#    - System status dashboard
-#    - Individual board health indicators  
-#    - Live telemetry graphs (temperature, current, position)
-#    - Error log with timestamps
-#    - CAN bus statistics and health
-
-# 3. Manual control capabilities:
-#    - Servo position control sliders
-#    - Emergency stop button
-#    - System reset and safe mode controls
-#    - Configuration parameter adjustment
-```
-
-### 6. Configuration and Customization
-
-#### A. System-Wide Configuration
 ```c
-// Edit common/config/papyrus_config.h
+// Initialize main board
+papyrus_status_t main_board_init(void);
 
-// Timing parameters
-#define SERVO_UPDATE_RATE_HZ        50      // Servo control frequency  
-#define SENSOR_UPDATE_RATE_HZ       100     // Sensor reading frequency
-#define EMERGENCY_RESPONSE_TIME_MS  1       // Emergency stop timeout
+// Send command to controller
+papyrus_status_t main_board_send_command(board_id_t target, 
+                                       system_command_t cmd, 
+                                       const uint8_t* data);
 
-// Safety limits  
-#define SERVO_CURRENT_LIMIT_MA      2000    // Servo current limit
-#define TEMP_CRITICAL_HIGH_C        85      // Critical temperature
+// Request status from controller
+papyrus_status_t main_board_request_status(board_id_t target);
 
-// Communication settings
-#define CAN_BAUDRATE               500000   // CAN bus speed
-#define RADIO_FREQUENCY            433000000 // Radio frequency
+// Check controller health
+papyrus_status_t main_board_check_health(board_id_t target);
 ```
 
-#### B. Board-Specific Configuration
+## Controller Framework
+
+### Base Controller Structure
+
 ```c
-// Each board has its own configuration structure:
-
-// Main board: main_board/inc/main_board.h
-main_board_config_t config = {
-    .can_baudrate = 500000,
-    .radio_frequency = 433000000,
-    .log_enabled = true,
-    // ... other parameters
-};
-
-// Servo controller: controllers/servo_controller/servo_controller.h  
-servo_config_t servo_config = {
-    .servo_count = 3,
-    .pwm_frequency_hz = 50,
-    .current_limit_ma = {2000, 2000, 2000},
-    // ... other parameters
-};
+typedef struct {
+    controller_config_t config;      // Configuration
+    controller_status_t status;      // Current status
+    device_interface_t devices[8];   // Device interfaces
+    CAN_HandleTypeDef* hcan;        // CAN handle
+    
+    // Function pointers for derived classes
+    papyrus_status_t (*init_hardware)(void);
+    papyrus_status_t (*update_devices)(void);
+    papyrus_status_t (*process_command)(const can_message_t* msg);
+    papyrus_status_t (*read_sensors)(void);
+    papyrus_status_t (*enter_safe_mode)(void);
+    papyrus_status_t (*emergency_stop)(void);
+    papyrus_status_t (*self_test)(void);
+} controller_base_t;
 ```
 
-### 7. Maintenance and Updates
+### Controller Types
+- **Servo Controller**: PWM servo control with position feedback
+- **Thermocouple Controller**: SPI thermocouple reading with cold junction compensation
+- **General I/O Controller**: Digital I/O, analog inputs, relay control
 
-#### A. Firmware Updates
+## Servo Controller
+
+### Features
+- **PWM Control**: 50Hz servo signals with variable pulse width
+- **Position Feedback**: Potentiometer or encoder position sensing
+- **Current Monitoring**: ADC current sensing for stall detection
+- **Trajectory Planning**: Smooth position transitions
+- **Safety Limits**: Position and current limits with emergency stop
+
+### Configuration
+
+```c
+typedef struct {
+    uint16_t pwm_frequency;         // PWM frequency (Hz)
+    uint16_t min_position;           // Minimum position (ADC counts)
+    uint16_t max_position;           // Maximum position (ADC counts)
+    uint16_t current_limit;          // Current limit (mA)
+    uint16_t stall_current;          // Stall detection threshold (mA)
+    uint16_t move_speed;             // Movement speed (steps/sec)
+    uint16_t acceleration;           // Acceleration (steps/sec²)
+    uint8_t feedback_type;           // Feedback sensor type
+    uint8_t servo_count;             // Number of servos (1-3)
+} servo_config_t;
+```
+
+### Commands
+
+```c
+// Set servo position
+papyrus_status_t servo_set_position(uint8_t servo_id, uint16_t position);
+
+// Enable/disable servo
+papyrus_status_t servo_enable(uint8_t servo_id, bool enable);
+
+// Emergency stop all servos
+papyrus_status_t servo_emergency_stop(void);
+
+// Home servo to reference position
+papyrus_status_t servo_home(uint8_t servo_id);
+```
+
+## Ground Station
+
+### Features
+- **Radio Communication**: 433MHz/915MHz radio link
+- **Web Interface**: Real-time status display and control
+- **Data Logging**: Telemetry and command logging
+- **Emergency Controls**: Emergency stop and safe mode
+- **Multi-Client Support**: Multiple web clients with access control
+
+### Web Interface
+
 ```bash
-# 1. Build new firmware
-make clean
+# Start ground station
+make ground_station
+
+# Access web interface
+# Open browser to: http://localhost:8080
+```
+
+### Emergency Controls
+- **Emergency Stop**: Immediate system shutdown
+- **Safe Mode**: Reduced functionality mode
+- **System Reset**: Full system restart
+- **Status Monitoring**: Real-time system health
+
+## Bus Debugger
+
+### Features
+- **CAN Monitoring**: Passive CAN bus traffic analysis
+- **Message Injection**: Test message injection capability
+- **Error Detection**: CAN bus error monitoring
+- **LCD Display**: Real-time status display
+- **Standalone Operation**: Independent power and processing
+
+### Usage
+
+```bash
+# Connect to CAN bus
+# Power debugger with LiPo battery
+# LCD shows real-time CAN traffic
+
+# Inject test message
+# Use debugger interface to send test CAN messages
+```
+
+## Development Workflow
+
+### 1. Initial Setup
+
+```bash
+# Clone repository
+git clone <repository-url>
+cd Papyrus-RT-Firmware
+
+# Install dependencies
+sudo apt-get install gcc-arm-none-eabi stm32cubeprog
+
+# Build all components
 make all
-
-# 2. Update individual boards (system remains operational)
-make flash_servo        # Update servo controller
-# Other boards continue operating normally
-
-# 3. Update main board (requires system restart)
-make flash_main_board
-# All controllers will reconnect automatically
-
-# 4. Validate update
-python3 tools/testing/test_framework.py --categories unit
 ```
 
-#### B. Configuration Backup and Restore
+### 2. Hardware Connection
+
 ```bash
-# Backup configurations (saved in flash on each board)
-python3 tools/utilities/backup_config.py --all --output=config_backup.json
+# Connect ST-Link to main board
+# Tag-Connect 6-pin cable:
+# Pin 1: VCC (3.3V)
+# Pin 2: SWCLK
+# Pin 3: GND
+# Pin 4: SWDIO
+# Pin 5: NRST
+# Pin 6: GND
 
-# Restore configurations
-python3 tools/utilities/restore_config.py --input=config_backup.json --boards=all
-
-# Update single board configuration
-python3 tools/utilities/configure_board.py servo_controller --param=current_limit --value=1500
+# Connect controller boards via CAN bus
+# JST-XH connectors for CAN communication
 ```
 
-## Key Features Implemented
+### 3. Flash Firmware
 
-- **Modular Design**: Hot-swappable controller boards with standardized interfaces
-- **Real-time Operation**: FreeRTOS-based task management with guaranteed response times
-- **Robust Communication**: CAN bus with error handling + 433/915MHz radio backup
-- **Safety First**: Multiple layers of error detection with <1ms emergency response
-- **Development Friendly**: Comprehensive debugging tools and automated testing
+```bash
+# Flash main board
+make flash_main_board
 
-## Safety and Reliability
+# Flash controller boards
+make flash_servo
+make flash_tc
+make flash_io
 
-- **Emergency Stop**: <1ms response time across all boards via CAN bus
-- **Hot-Swap Support**: Controllers can be replaced without system shutdown
-- **Error Recovery**: Automatic retry and escalation procedures
-- **Health Monitoring**: Continuous system diagnostics and predictive maintenance
-- **Data Integrity**: CRC checking and message validation on all communications
+# Verify flash
+STM32_Programmer_CLI -c port=SWD -v
+```
 
-## Performance Specifications
+### 4. System Testing
 
-- **Real-time Response**: Emergency stop <1ms, servo control 50Hz, sensor reading 100Hz
-- **Communication**: CAN bus 500kbps, radio link with forward error correction
-- **Memory Usage**: Main board ~64KB flash/32KB RAM, controllers ~32KB flash/16KB RAM
-- **Reliability**: 99.9%+ uptime with automatic error recovery and hot-swap capability
+```bash
+# Run unit tests
+make test_unit
 
-## Getting Started Quick Reference
+# Run integration tests
+make test_integration
 
-1. **Build**: `make all` (builds all firmware components)
-2. **Flash**: `make flash_main_board flash_servo flash_tc` (deploy to hardware)
-3. **Test**: `python3 tools/testing/test_framework.py` (validate operation)
-4. **Monitor**: Connect to web interface at http://192.168.1.100:8080
-5. **Debug**: Use bus debugger or serial output for troubleshooting
+# Run hardware-in-loop tests
+make test_hardware
+```
 
-For detailed implementation information, see `docs/IMPLEMENTATION_SUMMARY.md`. 
+### 5. Debugging
+
+```bash
+# Start debug session
+make debug_main_board
+
+# Monitor CAN traffic
+make monitor_can
+
+# Check system status
+make status
+```
+
+## Configuration
+
+### System Configuration (`papyrus_config.h`)
+
+```c
+// Timing configuration
+#define SYSTEM_TICK_RATE_HZ        1000
+#define CAN_BUS_BAUDRATE          500000
+#define RADIO_FREQUENCY           915000000
+
+// Safety limits
+#define MAX_TEMPERATURE_C          85
+#define MAX_CURRENT_MA            5000
+#define WATCHDOG_TIMEOUT_MS       1000
+
+// Task priorities
+#define TASK_PRIORITY_EMERGENCY   7
+#define TASK_PRIORITY_CAN         6
+#define TASK_PRIORITY_CONTROL     5
+```
+
+### Board-Specific Configuration
+
+```c
+// Main board config
+typedef struct {
+    uint32_t can_baudrate;
+    uint32_t radio_frequency;
+    uint16_t watchdog_timeout;
+    uint8_t log_level;
+    bool emergency_stop_enabled;
+} main_board_config_t;
+
+// Controller config
+typedef struct {
+    uint16_t update_rate_hz;
+    uint16_t timeout_ms;
+    uint8_t can_id;
+    bool safe_mode_enabled;
+} controller_config_t;
+```
+
+## Error Handling
+
+### Error Codes
+
+```c
+typedef enum {
+    PAPYRUS_OK = 0,
+    PAPYRUS_ERROR = -1,
+    PAPYRUS_ERROR_TIMEOUT = -2,
+    PAPYRUS_ERROR_INVALID_PARAM = -3,
+    PAPYRUS_ERROR_HARDWARE = -4,
+    PAPYRUS_ERROR_COMMUNICATION = -5,
+    PAPYRUS_ERROR_MEMORY = -6,
+    PAPYRUS_ERROR_CONFIG = -7,
+    PAPYRUS_ERROR_EMERGENCY = -8
+} papyrus_status_t;
+```
+
+### Emergency Procedures
+
+```c
+// Emergency stop function
+void papyrus_emergency_stop(error_code_t error);
+
+// Safe mode entry
+papyrus_status_t enter_safe_mode(void);
+
+// System recovery
+papyrus_status_t system_recovery(void);
+```
+
+## Performance Characteristics
+
+### Timing Requirements
+- **Emergency Stop**: < 1ms response time
+- **CAN Communication**: 10ms update rate
+- **Servo Control**: 20ms control loop
+- **Data Logging**: 100ms logging rate
+- **Status Reporting**: 1000ms status rate
+
+### Memory Usage
+- **Main Board**: 512KB RAM, 1MB Flash
+- **Controller Boards**: 32KB RAM, 256KB Flash
+- **FreeRTOS Heap**: 32KB
+- **CAN Buffer**: 64 messages
+
+### Power Consumption
+- **Main Board**: 500mA @ 3.3V
+- **Controller Board**: 100mA @ 3.3V
+- **Ground Station**: 200mA @ 5V
+- **Bus Debugger**: 150mA @ 3.3V
+
+## Troubleshooting
+
+### Common Issues
+
+**CAN Bus Communication Failure**
+```bash
+# Check CAN bus termination
+# Verify 120Ω termination resistors
+
+# Check CAN transceiver
+# Verify SN65HVD232QDRG4Q1 connections
+
+# Monitor CAN traffic
+make monitor_can
+```
+
+**Flash Programming Issues**
+```bash
+# Check ST-Link connection
+STM32_Programmer_CLI -c port=SWD
+
+# Reset target if needed
+STM32_Programmer_CLI -c port=SWD -rst
+
+# Verify flash contents
+STM32_Programmer_CLI -c port=SWD -v
+```
+
+**Servo Control Problems**
+```bash
+# Check servo power supply
+# Verify PWM signal on oscilloscope
+# Test servo feedback circuit
+# Check current monitoring
+```
+
+### Debug Commands
+
+```bash
+# System status
+make status
+
+# CAN bus monitor
+make monitor_can
+
+# Memory usage
+make memory_usage
+
+# Performance analysis
+make performance
+```
+
+## Maintenance
+
+### Regular Tasks
+- **Weekly**: Check system logs for errors
+- **Monthly**: Verify CAN bus integrity
+- **Quarterly**: Calibrate sensors and servos
+- **Annually**: Full system test and validation
+
+### Firmware Updates
+```bash
+# Backup current firmware
+make backup
+
+# Update firmware
+make flash_all
+
+# Verify update
+make verify_flash
+```
