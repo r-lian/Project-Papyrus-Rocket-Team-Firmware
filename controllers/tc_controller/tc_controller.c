@@ -57,11 +57,16 @@ int main() {
   if (tc_controller_init(&this) != PAPYRUS_OK) {
     Error_Handler();
   }
+  this.base.board_id = 1;
+  controller_update_can_filter(&this.base.can, this.base.board_id);
   load_ctable_sys0(papyrus_cmdrun_table, papyrus_cmdresp_table,
                    papyrus_cmd_lens);
   load_ctable_tc1(papyrus_cmdrun_table, papyrus_cmdresp_table,
                   papyrus_cmd_lens);
-  uart_debugger(&this);
+  for (;;) {
+    HAL_Delay(500);
+  }
+  // uart_debugger(&this);
   /*
     CANMessage prepmsg;
     papyrus_prep_theader(&prepmsg.tHeader);
@@ -73,8 +78,6 @@ int main() {
     prepmsg.msg.short_args[2] = 0x03;
     HAL_FDCAN_AddMessageToTxFifoQ(&(this.base.can.handle), &prepmsg.tHeader,
                                   prepmsg.msg.raw_data);
-    for (;;) {
-      HAL_Delay(500);
-    }
+
     */
 }

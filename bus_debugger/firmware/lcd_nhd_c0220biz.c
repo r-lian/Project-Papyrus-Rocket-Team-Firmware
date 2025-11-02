@@ -78,14 +78,6 @@ void lcd_set_addr(uint8_t addr, I2C_HandleTypeDef *i2c) {
 }
 
 void nhd_init(PapyrusI2C *display) {
-  // 38 -> 2 lines, 8 bit interface
-  // 14 -> display shift, S/C
-  // 78
-  // 5e
-  // 6d
-  // 0c
-  // 01
-  // 06
   I2C_HandleTypeDef *i2c = &display->handle;
   lcd_function_set(LCD_FLAG_8BITS | LCD_FLAG_2LINES, i2c);
   lcd_function_set(LCD_FLAG_8BITS | LCD_FLAG_2LINES | LCD_FLAG_ITBL1, i2c);

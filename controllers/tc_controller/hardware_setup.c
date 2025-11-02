@@ -79,6 +79,7 @@ PapyrusStatus tc_controller_init(TCController *tc_ctrl) {
   PapyrusStatus err;
   tc_ctrl->base.controller_type = CONTROLLER_TYPE_THERMOCOUPLE;
   tc_ctrl->base.board_revision = 0;
+  tc_ctrl->base.firmware_revision = 1;
   for (int i = 0; i < TC_MAX_CHANNELS; i++) {
     tc_ctrl->tc_config.tc_type[i] = TC_TYPE_K;
     tc_ctrl->tc_config.temp_alarm_high_c[i] = FIXED32_MAX;

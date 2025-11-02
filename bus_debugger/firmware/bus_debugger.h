@@ -8,6 +8,7 @@
 #ifndef BUS_DEBUGGER_H
 #define BUS_DEBUGGER_H
 
+#include "Legacy/stm32_hal_legacy.h"
 #include "papyrus_can.h"
 #include "papyrus_config.h"
 #include "papyrus_hardware.h"
@@ -104,18 +105,16 @@ struct MenuEntry {
     struct {
       char *format;
       MVarType kind;
-      void (*commit)(void *);
+      void *value;
       bool do_confirm;
       union {
         struct {
-          int32_t int_val;
           int32_t int_min;
           int32_t int_max;
           int32_t int_step;
           int32_t default_int;
         };
         struct {
-          float float_val;
           float float_min;
           float float_max;
           float float_step;
@@ -124,23 +123,30 @@ struct MenuEntry {
           bool no_enabled;
         };
         struct {
-          bool bool_val;
           char *true_str;
           bool default_bool;
           char *false_str;
         };
         struct {
-          char *enum_options;
-          uint32_t enum_val;
+          char **enum_options;
+          uint32_t num_options;
           uint32_t default_enum;
+          bool do_wrap;
         };
       };
     } variable;
   };
   bool is_selectable;
 };
+typedef enum {
+  SPECIAL_NONE,
+  SPECIAL_MAINMENU,
+  SPECIAL_CANLIST,
+  SPECIAL_CONTROLLER
+} SpecialMenu;
 
 struct Menu {
+  SpecialMenu special;
   MenuEntry *entries;
   uint16_t num_entries;
   uint16_t cur_entry;
@@ -150,10 +156,50 @@ struct Menu {
   Menu *prev_menu;
 };
 
+typedef enum : uint32_t {
+  BACKLIGHT_ON,
+  BACKLIGHT_AUTO_SLEEP,
+  BACKLIGHT_OFF
+} BDBacklightSetting;
+
+typedef enum : uint32_t {
+  CANSORT_RECENT,
+  CANSORT_ID,
+  CANSORT_TYPE
+} BDCansortSetting;
+
+typedef struct {
+  BDBacklightSetting backlight;
+  bool keyrepeat;
+  bool sound;
+  BDCansortSetting cansort;
+} BusDebuggerSettings;
+
+typedef enum {
+  RESPONSE_SCANNING,
+  RESPONSE_IGNORE,
+  RESPONSE_ONLY_ERRORS,
+  RESPONSE_DIRECT
+} ResponseMode;
+
+typedef struct {
+  BoardID board_id;
+  uint8_t board_revision;
+  uint8_t firmware_revision;
+  ControllerType kind;
+  uint32_t last_used;
+  char name_buf[20];
+} BusDevice;
+extern uint32_t num_bus_devices;
+extern BusDevice *bus_devices;
+
 extern Menu *cur_menu;
 /* Bus Debugger Class */
 typedef struct {
   /* Configuration and Status */
+
+  BusDebuggerSettings settings;
+  ResponseMode resp_mode;
 
   /* Hardware Interfaces */
   PapyrusCAN can;
@@ -181,11 +227,16 @@ typedef struct {
   uint32_t msg_log_cap;
 
 } BusDebugger;
+extern BusDebugger this;
 
 #endif /* BUS_DEBUGGER_H */
 
 extern bool next_tick;
 extern bool tick_too_slow;
+extern uint32_t scan_timeout;
+extern void (*on_notif_dismiss)(uint8_t button);
+
+extern FDCAN_RxHeaderTypeDef lastRxHeader;
 
 PapyrusStatus bus_debugger_init(BusDebugger *bus_dbg);
 PapyrusStatus bd_hardware_init(BusDebugger *bus_dbg);
@@ -193,3 +244,8 @@ void Error_Handler();
 void allocation_failed();
 float get_bat_voltage();
 void reset_board(void *unused);
+void free_menu(Menu *menu, bool all_prev);
+void update_prescaler(uint16_t val);
+void start_pwm();
+void stop_pwm();
+void push_sticky_notif(char *text);

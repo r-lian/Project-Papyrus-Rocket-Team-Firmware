@@ -38,7 +38,7 @@ typedef struct {
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define ABS(x) ((x) < 0 ? -(x) : (x))
-#define CLAMP(x, min, max) (PAPYRUS_MIN(PAPYRUS_MAX((x), (min)), (max)))
+#define CLAMP(x, min, max) (MIN(MAX((x), (min)), (max)))
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define GPIO(p) p.grp, p.pin

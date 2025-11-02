@@ -40,6 +40,7 @@ BUS_DEBUGGER_DIR = bus_debugger
 TOOLS_DIR = tools
 DRIVERS_DIR = drivers
 DOCS_DIR = docs
+POWER_BOARD_DIR = power_board
 
 # Output Directories
 BUILD_COMMON = $(BUILD_DIR)/common
@@ -50,6 +51,7 @@ BUILD_IO = $(BUILD_DIR)/io_controller
 BUILD_GS = $(BUILD_DIR)/ground_station
 BUILD_DEBUGGER = $(BUILD_DIR)/bus_debugger
 BUILD_CONTROLLER = $(BUILD_DIR)/controller
+BUILD_PB = $(BUILD_DIR)/power_board
 
 # Common Compiler Flags
 COMMON_CFLAGS = -Wall -Wextra -Werror -Wno-analyzer-infinite-loop -std=c23 -fdata-sections -ffunction-sections -fanalyzer
@@ -81,9 +83,10 @@ SERVO_SOURCES = $(wildcard $(CONTROLLERS_DIR)/servo_controller/*.c)
 TC_SOURCES = $(wildcard $(CONTROLLERS_DIR)/tc_controller/*.c)
 IO_SOURCES = $(wildcard $(CONTROLLERS_DIR)/io_controller/*.c)
 GS_SOURCES = $(wildcard $(GROUND_STATION_DIR)/firmware/*.c)
-DEBUGGER_SOURCES = $(wildcard $(BUS_DEBUGGER_DIR)/firmware/*.c)
+DEBUGGER_SOURCES = $(wildcard $(BUS_DEBUGGER_DIR)/firmware/*.c) $(wildcard $(BUS_DEBUGGER_DIR)/controllers/*.c)
 CDRIVER_SOURCES = $(wildcard $(DRIVERS_DIR)/stm32c0xx/*.c)
 CONTROLLERS_EXTRA_SOURCES = $(wildcard $(CONTROLLERS_DIR)/framework/*.c) $(wildcard $(CONTROLLERS_DIR)/target/*.c) $(wildcard $(CONTROLLERS_DIR)/devices/*.c)
+PB_SOURCES = $(wildcard $(POWER_BOARD_DIR)/*.c)
 
 # Object Files
 COMMON_OBJECTS = $(COMMON_SOURCES:%.c=$(BUILD_COMMON)/%.o)
@@ -95,6 +98,7 @@ IO_OBJECTS = $(IO_SOURCES:%.c=$(BUILD_IO)/%.o) $(CONTROLLER_COMMON)
 GS_OBJECTS = $(GS_SOURCES:%.c=$(BUILD_GS)/%.o) $(CONTROLLER_COMMON)
 DEBUGGER_OBJECTS = $(DEBUGGER_SOURCES:%.c=$(BUILD_DEBUGGER)/%.o) $(COMMON_OBJECTS) $(CDRIVER_OBJECTS) $(CONTROLLER_STARTUP:%.s=$(BUILD_COMMON)/%.o)
 CDRIVER_OBJECTS = $(CDRIVER_SOURCES:%.c=%.o)
+PB_OBJECTS = $(PB_SOURCES:%.c=$(BUILD_PB)/%.o) $(COMMON_OBJECTS) $(CDRIVER_OBJECTS) $(CONTROLLER_STARTUP:%.s=$(BUILD_COMMON)/%.o)
 
 # Target Binaries
 MAIN_BOARD_ELF = $(BUILD_MAIN)/main_board.elf
@@ -103,9 +107,10 @@ TC_ELF = $(BUILD_TC)/tc_controller.elf
 IO_ELF = $(BUILD_IO)/io_controller.elf
 GS_ELF = $(BUILD_GS)/ground_station.elf
 DEBUGGER_ELF = $(BUILD_DEBUGGER)/bus_debugger.elf
+PB_ELF = $(BUILD_PB)/power_board.elf
 
 # All targets
-ALL_TARGETS = main_board servo_controller tc_controller io_controller ground_station bus_debugger
+ALL_TARGETS = main_board servo_controller tc_controller io_controller ground_station bus_debugger power_board
 
 # Default target
 .PHONY: all
@@ -209,6 +214,19 @@ $(DEBUGGER_ELF): $(DEBUGGER_OBJECTS) | $(BUILD_DEBUGGER)
 	$(SIZE) $@
 	@echo "Successfully linked bus debugger firmware."
 
+
+# Power Board Target
+.PHONY: power_board
+power_board: $(PB_ELF)
+
+$(PB_ELF): $(PB_OBJECTS) | $(BUILD_PB)
+	@echo "Linking power board firmware..."
+	$(CC) $(CONTROLLER_CFLAGS) $(OPT_FLAGS) $(PB_OBJECTS) -o $@ $(CONTROLLER_LDFLAGS)
+	$(OBJCOPY) -O binary $@ $(BUILD_PB)/power_board.bin
+	$(OBJCOPY) -O ihex $@ $(BUILD_PB)/power_board.hex
+	$(SIZE) $@
+	@echo "Successfully linked power board firmware."
+
 # Common object compilation
 $(BUILD_COMMON)/%.o: %.c | $(BUILD_COMMON)
 	@mkdir -p $(dir $@)
@@ -249,14 +267,20 @@ $(BUILD_GS)/%.o: %.c | $(BUILD_GS)
 $(BUILD_DEBUGGER)/%.o: %.c | $(BUILD_DEBUGGER)
 	@mkdir -p $(dir $@)
 	@echo "Compiling $< for bus debugger..."
-	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I $(CONTROLLERS_DIR)/target -I$(BUS_DEBUGGER_DIR)/firmware $(OPT_FLAGS) -c $< -o $@
+	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I $(CONTROLLERS_DIR)/target -I$(BUS_DEBUGGER_DIR)/firmware -I$(BUS_DEBUGGER_DIR)/controllers $(OPT_FLAGS) -c $< -o $@
+
+# Power board object compilation
+$(BUILD_PB)/%.o: %.c | $(BUILD_PB)
+	@mkdir -p $(dir $@)
+	@echo "Compiling $< for power board..."
+	$(CC) $(CONTROLLER_CFLAGS) $(COMMON_CPPFLAGS) -I$(POWER_BOARD_DIR) -I $(CONTROLLERS_DIR)/target $(OPT_FLAGS) -c $< -o $@
 
 # Create build directories
-$(BUILD_DIR) $(BUILD_COMMON) $(BUILD_MAIN) $(BUILD_SERVO) $(BUILD_TC) $(BUILD_IO) $(BUILD_GS) $(BUILD_DEBUGGER):
+$(BUILD_DIR) $(BUILD_COMMON) $(BUILD_MAIN) $(BUILD_SERVO) $(BUILD_TC) $(BUILD_IO) $(BUILD_GS) $(BUILD_DEBUGGER) $(BUILD_PB):
 	@mkdir -p $@
 
 # Flash targets
-.PHONY: flash_main_board flash_servo flash_tc flash_io flash_gs flash_debugger
+.PHONY: flash_main_board flash_servo flash_tc flash_io flash_gs flash_debugger flash_pb
 flash_main_board: $(MAIN_BOARD_ELF)
 	$(STLINK) write $(BUILD_MAIN)/main_board.bin 0x08000000
 
@@ -274,6 +298,9 @@ flash_gs: $(GS_ELF)
 
 flash_debugger: $(DEBUGGER_ELF)
 	$(STLINK) --mass-erase --connect-under-reset write $(BUILD_DEBUGGER)/bus_debugger.bin 0x08000000
+
+flash_pb: $(PB_ELF)
+	$(STLINK) --mass-erase --connect-under-reset write $(BUILD_PB)/power_board.bin 0x08000000
 
 # Debug targets
 .PHONY: debug_main_board debug_servo debug_tc debug_io debug_gs debug_debugger

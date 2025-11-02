@@ -144,6 +144,12 @@ struct CANMessage {
   struct CANMessage *next;
 };
 typedef struct CANMessage CANMessage;
+
+typedef enum {
+  CONTROLLER_TYPE_SERVO = 0,
+  CONTROLLER_TYPE_THERMOCOUPLE,
+  CONTROLLER_TYPE_UNKNOWN
+} ControllerType;
 /* Function Prototypes */
 
 #define COMMAND_PROTO(command)                                                 \

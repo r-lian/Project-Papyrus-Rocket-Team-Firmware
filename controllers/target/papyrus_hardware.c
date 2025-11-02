@@ -1,5 +1,6 @@
 #include "papyrus_hardware.h"
 #include "papyrus_utils.h"
+#include "stm32c0xx_hal_adc.h"
 #include "stm32c0xx_hal_cortex.h"
 #include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_spi.h"
@@ -12,7 +13,7 @@ PapyrusStatus controller_fdcan_init(PapyrusCAN *can) {
   can->handle.Instance = FDCAN1;
   can->handle.Init.ClockDivider = FDCAN_CLOCK_DIV1;
   can->handle.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
-  can->handle.Init.Mode = FDCAN_MODE_INTERNAL_LOOPBACK; // FDCAN_MODE_NORMAL;
+  can->handle.Init.Mode = FDCAN_MODE_NORMAL;
   can->handle.Init.AutoRetransmission = DISABLE;
   can->handle.Init.TransmitPause = ENABLE;
   can->handle.Init.ProtocolException = DISABLE;
@@ -77,6 +78,7 @@ PapyrusStatus controller_update_can_filter(PapyrusCAN *can, uint8_t new_id) {
   }
   return PAPYRUS_OK;
 }
+
 PapyrusStatus controller_spi_init(PapyrusSPI *spi) {
   memset(&spi->handle.Instance, 0, sizeof(SPI_HandleTypeDef));
   spi->handle.Instance = SPI1;

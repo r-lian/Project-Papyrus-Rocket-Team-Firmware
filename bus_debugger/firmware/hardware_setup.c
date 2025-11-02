@@ -8,8 +8,10 @@
 #include "stm32c0xx_hal_adc_ex.h"
 #include "stm32c0xx_hal_fdcan.h"
 #include "stm32c0xx_hal_gpio.h"
+#include "stm32c0xx_hal_i2c.h"
 #include "stm32c0xx_hal_spi.h"
 #include "stm32c0xx_hal_uart.h"
+#include <string.h>
 
 const PapyrusGPIO BD_UART_RX = {GPIOA, GPIO_PIN_13};
 const PapyrusGPIO BD_UART_TX = {GPIOA, GPIO_PIN_14};
@@ -126,6 +128,19 @@ PapyrusStatus bus_debugger_init(BusDebugger *bus_dbg) {
   FORWARD_ERR(bd_hardware_init(bus_dbg));
   return PAPYRUS_OK;
 }
+void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim) {
+  GPIO_InitTypeDef GPIO_InitStruct = {0};
+  if (htim->Instance == TIM1) {
+    __HAL_RCC_GPIOA_CLK_ENABLE();
+
+    GPIO_InitStruct.Pin = GPIO_PIN_1;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF5_TIM1;
+    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+  }
+}
 
 PapyrusStatus bd_hardware_init(BusDebugger *bus_dbg) {
   PapyrusStatus err;
@@ -159,7 +174,63 @@ PapyrusStatus bd_hardware_init(BusDebugger *bus_dbg) {
   HAL_GPIO_WritePin(GPIO(BD_BACKLIGHT_PIN), GPIO_PIN_RESET);
   HAL_GPIO_WritePin(GPIO(BD_LCD_RESET), GPIO_PIN_RESET);
 
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
+
+  bus_dbg->piezo.handle.Instance = TIM1;
+  bus_dbg->piezo.handle.Init.Prescaler = 1;
+  bus_dbg->piezo.handle.Init.CounterMode = TIM_COUNTERMODE_UP;
+  bus_dbg->piezo.handle.Init.Period = 12000;
+  bus_dbg->piezo.handle.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  bus_dbg->piezo.handle.Init.RepetitionCounter = 0;
+  bus_dbg->piezo.handle.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&bus_dbg->piezo.handle) != HAL_OK) {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&bus_dbg->piezo.handle,
+                                            &sMasterConfig) != HAL_OK) {
+    Error_Handler();
+  }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 6000;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_RESET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&bus_dbg->piezo.handle, &sConfigOC,
+                                TIM_CHANNEL_2) != HAL_OK) {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.BreakFilter = 0;
+  sBreakDeadTimeConfig.BreakAFMode = TIM_BREAK_AFMODE_INPUT;
+  sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
+  sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
+  sBreakDeadTimeConfig.Break2Filter = 0;
+  sBreakDeadTimeConfig.Break2AFMode = TIM_BREAK_AFMODE_INPUT;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&bus_dbg->piezo.handle,
+                                    &sBreakDeadTimeConfig) != HAL_OK) {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM1_Init 2 */
+
+  /* USER CODE END TIM1_Init 2 */
+  HAL_TIM_MspPostInit(&bus_dbg->piezo.handle);
+
   // Init I2C
+
+  memset(&bus_dbg->display.handle, 0, sizeof(I2C_HandleTypeDef));
 
   bus_dbg->display.handle.Instance = I2C2;
   bus_dbg->display.handle.Init.Timing = 0x00402D41;
@@ -208,16 +279,68 @@ PapyrusStatus bd_hardware_init(BusDebugger *bus_dbg) {
 
   HAL_ADCEx_Calibration_Start(&bus_dbg->batread.handle);
 
-  /** Configure Regular Channel
-   */
   sConfig.Channel = ADC_CHANNEL_2;
   sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
   if (HAL_ADC_ConfigChannel(&bus_dbg->batread.handle, &sConfig) != HAL_OK) {
     Error_Handler();
   }
 
+  PapyrusCAN *can = &this.can;
+
+  memset(&can->handle, 0, sizeof(FDCAN_HandleTypeDef));
+  can->handle.Instance = FDCAN1;
+  can->handle.Init.ClockDivider = FDCAN_CLOCK_DIV1;
+  can->handle.Init.FrameFormat = FDCAN_FRAME_CLASSIC;
+  can->handle.Init.Mode = FDCAN_MODE_NORMAL;
+  can->handle.Init.AutoRetransmission = DISABLE;
+  can->handle.Init.TransmitPause = ENABLE;
+  can->handle.Init.ProtocolException = DISABLE;
+  can->handle.Init.NominalPrescaler = 20;
+  can->handle.Init.NominalSyncJumpWidth = 1;
+  can->handle.Init.NominalTimeSeg1 = 14;
+  can->handle.Init.NominalTimeSeg2 = 2;
+  can->handle.Init.DataPrescaler = 1;
+  can->handle.Init.DataSyncJumpWidth = 4;
+  can->handle.Init.DataTimeSeg1 = 5;
+  can->handle.Init.DataTimeSeg2 = 4;
+  can->handle.Init.StdFiltersNbr = 1;
+  can->handle.Init.ExtFiltersNbr = 0;
+  can->handle.Init.TxFifoQueueMode = FDCAN_TX_FIFO_OPERATION;
+  if (HAL_FDCAN_Init(&can->handle) != HAL_OK) {
+    return PAPYRUS_ERROR_HARDWARE;
+  }
+  FDCAN_FilterTypeDef sFilterConfig = {0};
+
+  /* Configure Rx filter */
+  sFilterConfig.IdType = FDCAN_STANDARD_ID;
+  sFilterConfig.FilterIndex = 0;
+  sFilterConfig.FilterType = FDCAN_FILTER_MASK;
+  sFilterConfig.FilterConfig = FDCAN_FILTER_TO_RXFIFO0;
+  sFilterConfig.FilterID1 = 0x000;
+  sFilterConfig.FilterID2 = 0x000;
+  if (HAL_FDCAN_ConfigFilter(&can->handle, &sFilterConfig) != HAL_OK) {
+    return PAPYRUS_ERROR_HARDWARE;
+  }
+  irq_fdcan = &can->handle;
+  if (HAL_FDCAN_ActivateNotification(
+          &can->handle, FDCAN_IT_RX_FIFO0_NEW_MESSAGE, 0) != HAL_OK) {
+    return PAPYRUS_ERROR_HARDWARE;
+  }
+  if (HAL_FDCAN_Start(&can->handle) != HAL_OK) {
+    return PAPYRUS_ERROR_HARDWARE;
+  }
+
+  HAL_NVIC_SetPriority(FDCAN1_IT0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(FDCAN1_IT0_IRQn);
+
   return PAPYRUS_OK;
 }
+
+void update_prescaler(uint16_t val) {
+  __HAL_TIM_SET_PRESCALER(&this.piezo.handle, val);
+}
+void start_pwm() { HAL_TIM_PWM_Start(&this.piezo.handle, TIM_CHANNEL_2); }
+void stop_pwm() { HAL_TIM_PWM_Stop(&this.piezo.handle, TIM_CHANNEL_2); }
 
 void HAL_MspInit(void) {
   __HAL_RCC_SYSCFG_CLK_ENABLE();
@@ -252,6 +375,19 @@ void HAL_UART_MspDeInit(UART_HandleTypeDef *huart) {
     __HAL_RCC_USART2_CLK_DISABLE();
 
     HAL_GPIO_DeInit(GPIOA, BD_UART_RX.pin | BD_UART_TX.pin);
+  }
+}
+void HAL_TIM_PWM_MspInit(TIM_HandleTypeDef *htim_pwm) {
+  if (htim_pwm->Instance == TIM1) {
+
+    __HAL_RCC_TIM1_CLK_ENABLE();
+  }
+}
+
+void HAL_TIM_PWM_MspDeInit(TIM_HandleTypeDef *htim_pwm) {
+  if (htim_pwm->Instance == TIM1) {
+
+    __HAL_RCC_TIM1_CLK_DISABLE();
   }
 }
 void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c) {
@@ -359,17 +495,11 @@ void HAL_FDCAN_MspInit(FDCAN_HandleTypeDef *hfdcan) {
     __HAL_RCC_FDCAN1_CLK_ENABLE();
     __HAL_RCC_GPIOA_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
-    GPIO_InitStruct.Pin = GPIO_PIN_12;
+    GPIO_InitStruct.Pin = GPIO_PIN_0 | GPIO_PIN_1;
     GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = GPIO_AF4_FDCAN1;
-    HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-    GPIO_InitStruct.Pin = GPIO_PIN_5;
-    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    GPIO_InitStruct.Alternate = GPIO_AF4_FDCAN1;
+    GPIO_InitStruct.Alternate = GPIO_AF3_FDCAN1;
     HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
   }
 }

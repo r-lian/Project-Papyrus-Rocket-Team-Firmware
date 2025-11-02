@@ -13,11 +13,6 @@
 #include <stdint.h>
 
 /* Controller Board Types */
-typedef enum {
-  CONTROLLER_TYPE_SERVO = 0,
-  CONTROLLER_TYPE_THERMOCOUPLE,
-  CONTROLLER_TYPE_UNKNOWN
-} ControllerType;
 
 /* Controller State Definitions */
 typedef enum {
